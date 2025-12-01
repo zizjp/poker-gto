@@ -125,3 +125,21 @@ document.addEventListener("DOMContentLoaded", () => {
   // 初期タブ（トレーナー）
   renderTab("trainer");
 });
+
+// ===== Service Worker registration =====
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    // 現在のURLを基準に sw.js への相対パスを解決
+    // 例: https://username.github.io/poker-gto/ → https://username.github.io/poker-gto/sw.js
+    const swUrl = new URL("sw.js", window.location.href).toString();
+
+    navigator.serviceWorker
+      .register(swUrl)
+      .then((registration) => {
+        console.log("Service worker registered:", registration.scope);
+      })
+      .catch((err) => {
+        console.error("Service worker registration failed:", err);
+      });
+  });
+}
