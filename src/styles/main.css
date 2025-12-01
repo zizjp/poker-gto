@@ -454,30 +454,26 @@ nav button.active,
 
 /* カードの基本トランジション（translate/rotate/opacity） */
 .swipe-card {
-  transition: transform 0.2s ease-out, opacity 0.2s ease-out;
+  transition: transform 0.25s ease-out, opacity 0.25s ease-out, box-shadow 0.25s ease-out, border-color 0.25s ease-out;
 }
 
-/* 回答確定で左に飛んでいく（例: FOLD） */
+/* スワイプアウト用 */
 .swipe-card--leave-left {
-  transform: translateX(-120%) rotate(-18deg);
+  transform: translateX(-140%) rotate(-20deg);
   opacity: 0;
 }
 
-/* 回答確定で右に飛んでいく（例: CALL/RAISE） */
 .swipe-card--leave-right {
-  transform: translateX(120%) rotate(18deg);
+  transform: translateX(140%) rotate(20deg);
   opacity: 0;
 }
 
-/* 元の位置に戻すとき用（次の問題セット時に使う） */
 .swipe-card--reset {
   transform: translateX(0) rotate(0);
   opacity: 1;
 }
 
-/* ==== 正解・不正解エフェクト ==== */
-
-/* 正解 → 緑の光が走るイメージ */
+/* 正解 → 緑の光 */
 @keyframes swipeCardCorrectGlow {
   0% {
     box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
@@ -497,7 +493,7 @@ nav button.active,
   animation: swipeCardCorrectGlow 0.45s ease-out;
 }
 
-/* 不正解 → 赤のシェイク */
+/* 不正解 → 赤シェイク */
 @keyframes swipeCardWrongShake {
   0% {
     transform: translateX(0);

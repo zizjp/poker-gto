@@ -14,6 +14,10 @@ let trainer: Trainer | null = null;
 
 const REVIEW_HANDS_KEY = "pftrainer_review_hands_v1";
 
+// ==========================
+// トレーナーインスタンス初期化・更新
+// ==========================
+
 export function initTrainerInstance() {
   const settings = loadSettings();
   const rangeSets = loadRangeSets();
@@ -29,6 +33,10 @@ export function refreshTrainerConfig() {
   const rangeSets = loadRangeSets();
   trainer.updateConfig(settings, rangeSets);
 }
+
+// ==========================
+// ビュー描画
+// ==========================
 
 export function renderTrainerView(): string {
   const settings = loadSettings();
@@ -130,6 +138,10 @@ export function renderTrainerView(): string {
   `;
 }
 
+// ==========================
+// イベント初期化
+// ==========================
+
 export function initTrainerViewEvents() {
   const rangeSetSelect = document.getElementById("trainerRangeSetSelect") as HTMLSelectElement | null;
   const scenarioSelect = document.getElementById("trainerScenarioSelect") as HTMLSelectElement | null;
@@ -160,6 +172,10 @@ export function initTrainerViewEvents() {
     });
   }
 }
+
+// ==========================
+// セッション制御
+// ==========================
 
 function startSession() {
   if (!trainer) {
@@ -225,7 +241,7 @@ function nextQuestion() {
 
   quizArea.innerHTML = `
     <div class="swipe-card-container">
-      <div class="swipe-card" id="quizCard">
+      <div class="swipe-card swipe-card--reset" id="quizCard">
         ${q.hand}
       </div>
       <div class="swipe-hints">
@@ -245,92 +261,57 @@ function nextQuestion() {
   initQuestionEvents();
 }
 
-function initQuestionEvents() {
-  const quizCard = document.getElementById("quizCard") as HTMLDivElement | null;
-  if (!quizCard) return;
+// ==========================
+// アニメーション系ヘルパー
+// ==========================
 
-  let startX = 0;
-  let startY = 0;
+// スワイプ方向に応じてカードを画面外に飛ばしてから onDone を呼ぶ
+function animateSwipeAnswer(
+  direction: "left" | "right",
+  onDone: () => void
+) {
+  const card = document.getElementById("quizCard") as HTMLDivElement | null;
+  if (!card) {
+    onDone();
+    return;
+  }
 
-  quizCard.addEventListener(
-    "touchstart",
-    (e) => {
-      const t = e.touches[0];
-      startX = t.clientX;
-      startY = t.clientY;
-    },
-    { passive: true }
+  card.classList.remove(
+    "swipe-card--leave-left",
+    "swipe-card--leave-right",
+    "swipe-card--reset"
   );
 
-  // ★ スワイプ中にブラウザ側スクロールが動かないようにする
-  quizCard.addEventListener(
-    "touchmove",
-    (e) => {
-      e.preventDefault(); // JSで処理するのでネイティブスクロール禁止
-    },
-    { passive: false }
-  );
+  // reflow
+  void card.offsetWidth;
 
-  quizCard.addEventListener(
-    "touchend",
-    (e) => {
-      const t = e.changedTouches[0];
-      const dx = t.clientX - startX;
-      const dy = t.clientY - startY;
+  const leaveClass =
+    direction === "left" ? "swipe-card--leave-left" : "swipe-card--leave-right";
 
-      const absX = Math.abs(dx);
-      const absY = Math.abs(dy);
+  card.classList.add(leaveClass);
 
-      if (absX < 30 && absY < 30) return;
+  const handleEnd = (e: TransitionEvent) => {
+    if (e.propertyName !== "transform") return;
+    card.removeEventListener("transitionend", handleEnd);
 
-      let answer: UserAnswer | null = null;
-      if (absX > absY) {
-        answer = dx > 0 ? "CALL" : "FOLD";
-      } else {
-        answer = dy < 0 ? "RAISE" : null;
-      }
+    card.classList.remove(leaveClass);
+    card.classList.add("swipe-card--reset");
 
-      if (answer && currentSession && currentQuestion && trainer) {
-        handleAnswer(answer);
-      }
-    },
-    { passive: true }
-  );
+    onDone();
+  };
 
-  const buttons = document.querySelectorAll<HTMLButtonElement>(".answer-button");
-  buttons.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const answer = btn.getAttribute("data-answer") as UserAnswer | null;
-      if (!answer) return;
-      if (currentSession && currentQuestion && trainer) {
-        handleAnswer(answer);
-      }
-    });
-  });
+  card.addEventListener("transitionend", handleEnd);
 }
 
-  const buttons = document.querySelectorAll<HTMLButtonElement>(".answer-button");
-  buttons.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const answer = btn.getAttribute("data-answer") as UserAnswer | null;
-      if (!answer) return;
-      if (currentSession && currentQuestion && trainer) {
-        handleAnswer(answer);
-      }
-    });
-  });
-
-  function playAnswerEffect(isCorrect: boolean) {
+// 正解/不正解の視覚エフェクト（緑の光・赤のシェイク）
+function playAnswerEffect(isCorrect: boolean) {
   const card = document.getElementById("quizCard") as HTMLDivElement | null;
   if (!card) return;
 
   const correctClass = "swipe-card-correct";
   const wrongClass = "swipe-card-wrong";
 
-  // 既存のアニメーションクラスを一旦外す
   card.classList.remove(correctClass, wrongClass);
-
-  // reflow してアニメーションを毎回リスタートさせるおまじない
   void card.offsetWidth;
 
   const targetClass = isCorrect ? correctClass : wrongClass;
@@ -344,12 +325,152 @@ function initQuestionEvents() {
   card.addEventListener("animationend", handleAnimationEnd);
 }
 
+// ==========================
+// 1問分のイベントセットアップ
+// ==========================
+
+function initQuestionEvents() {
+  const quizCard = document.getElementById("quizCard") as HTMLDivElement | null;
+  if (!quizCard) return;
+
+  let startX = 0;
+  let startY = 0;
+  let isTouching = false;
+  const SWIPE_THRESHOLD = 40;
+
+  // ---- タッチ操作（スマホ用） ----
+
+  quizCard.addEventListener(
+    "touchstart",
+    (e) => {
+      const t = e.touches[0];
+      startX = t.clientX;
+      startY = t.clientY;
+      isTouching = true;
+
+      // 初期位置へ戻す
+      quizCard.style.transform = "translateX(0) rotate(0)";
+    },
+    { passive: true }
+  );
+
+  quizCard.addEventListener(
+    "touchmove",
+    (e) => {
+      if (!isTouching) return;
+      const t = e.touches[0];
+      const dx = t.clientX - startX;
+      const dy = t.clientY - startY;
+
+      const absX = Math.abs(dx);
+      const absY = Math.abs(dy);
+
+      // 横スワイプ優先時のみスクロールを殺しつつ追従
+      if (absX > absY) {
+        e.preventDefault(); // ネイティブスクロールを抑止
+        const maxTilt = 18;
+        const tilt = (dx / 200) * maxTilt;
+        quizCard.style.transform = `translateX(${dx}px) rotate(${tilt}deg)`;
+      }
+    },
+    { passive: false }
+  );
+
+  quizCard.addEventListener(
+    "touchend",
+    (e) => {
+      if (!isTouching) return;
+      isTouching = false;
+
+      const t = e.changedTouches[0];
+      const dx = t.clientX - startX;
+      const dy = t.clientY - startY;
+
+      const absX = Math.abs(dx);
+      const absY = Math.abs(dy);
+
+      // タップ扱い
+      if (absX < 30 && absY < 30) {
+        quizCard.style.transform = "translateX(0) rotate(0)";
+        return;
+      }
+
+      let answer: UserAnswer | null = null;
+      let direction: "left" | "right" | null = null;
+
+      if (absX > absY) {
+        // 横スワイプ → FOLD/CALL
+        if (absX >= SWIPE_THRESHOLD) {
+          if (dx > 0) {
+            answer = "CALL";
+            direction = "right";
+          } else {
+            answer = "FOLD";
+            direction = "left";
+          }
+        }
+      } else {
+        // 縦スワイプ → RAISE（上方向のみ）
+        if (dy < -SWIPE_THRESHOLD) {
+          answer = "RAISE";
+        }
+      }
+
+      if (!answer) {
+        // しきい値未満 → 元位置に戻す
+        quizCard.style.transform = "translateX(0) rotate(0)";
+        return;
+      }
+
+      if (!trainer || !currentSession || !currentQuestion) return;
+
+      // inline transform はアニメーション前にクリア
+      quizCard.style.transform = "";
+
+      if (direction) {
+        animateSwipeAnswer(direction, () => handleAnswer(answer as UserAnswer));
+      } else {
+        handleAnswer(answer as UserAnswer);
+      }
+    },
+    { passive: true }
+  );
+
+  // ---- ボタン回答（PC/スマホどちらでも） ----
+
+  const buttons = document.querySelectorAll<HTMLButtonElement>(".answer-button");
+  buttons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const answer = btn.getAttribute("data-answer") as UserAnswer | null;
+      if (!answer) return;
+      if (!trainer || !currentSession || !currentQuestion) return;
+
+      let direction: "left" | "right" | null = null;
+      if (answer === "FOLD") direction = "left";
+      if (answer === "CALL" || answer === "RAISE") direction = "right";
+
+      // ボタン回答でも軽くスワイプアウトさせる
+      const card = document.getElementById("quizCard") as HTMLDivElement | null;
+      if (card && direction) {
+        card.style.transform = "";
+        animateSwipeAnswer(direction, () => handleAnswer(answer));
+      } else {
+        handleAnswer(answer);
+      }
+    });
+  });
+}
+
+// ==========================
+// 回答処理 + フィードバック
+// ==========================
+
 function handleAnswer(answer: UserAnswer) {
   if (!trainer || !currentSession || !currentQuestion) return;
 
   const result = trainer.answerQuestion(currentSession, currentQuestion, answer);
 
-  // ✅ 正解 → 緑の光 / 不正解 → 赤シェイク
+  // 正解 → 緑の光 / 不正解 → 赤シェイク
   playAnswerEffect(result.isCorrect);
 
   const quizArea = document.getElementById("trainerQuizArea");
@@ -390,6 +511,10 @@ function handleAnswer(answer: UserAnswer) {
   setTimeout(goNext, 1500);
 }
 
+// ==========================
+// セッション結果
+// ==========================
+
 function showSessionResult(session: TrainingSession) {
   const quizArea = document.getElementById("trainerQuizArea");
   if (!quizArea) return;
@@ -420,6 +545,10 @@ function showSessionResult(session: TrainingSession) {
     });
   }
 }
+
+// ==========================
+// 再描画
+// ==========================
 
 function rerenderTrainerView() {
   const main = document.getElementById("main");
