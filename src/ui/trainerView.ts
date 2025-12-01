@@ -337,6 +337,53 @@ function initQuestionEvents() {
   let startY = 0;
   let isTouching = false;
   const SWIPE_THRESHOLD = 40;
+  const COLOR_MAX_DIST = 80;
+
+  const resetCardColor = () => {
+    quizCard.style.backgroundColor = "";
+    quizCard.style.borderColor = "";
+  };
+
+  const applySwipeColor = (dx: number, dy: number) => {
+    const absX = Math.abs(dx);
+    const absY = Math.abs(dy);
+
+    // 初期は白
+    resetCardColor();
+
+    // 横優勢 → FOLD/CALL
+    if (absX > absY && absX > 10) {
+      const strength = Math.min(absX / COLOR_MAX_DIST, 1);
+
+      if (dx > 0) {
+        // → CALL (緑)
+        const bgAlpha = 0.12 + 0.28 * strength;
+        const borderAlpha = 0.5 + 0.5 * strength;
+        quizCard.style.backgroundColor = `rgba(34, 197, 94, ${bgAlpha})`; // green
+        quizCard.style.borderColor = `rgba(22, 163, 74, ${borderAlpha})`;
+      } else {
+        // ← FOLD (青)
+        const bgAlpha = 0.12 + 0.28 * strength;
+        const borderAlpha = 0.5 + 0.5 * strength;
+        quizCard.style.backgroundColor = `rgba(59, 130, 246, ${bgAlpha})`; // blue
+        quizCard.style.borderColor = `rgba(37, 99, 235, ${borderAlpha})`;
+      }
+      return;
+    }
+
+    // 縦優勢かつ上方向 → RAISE (赤)
+    if (absY > absX && absY > 10 && dy < 0) {
+      const strength = Math.min(absY / COLOR_MAX_DIST, 1);
+      const bgAlpha = 0.12 + 0.28 * strength;
+      const borderAlpha = 0.5 + 0.5 * strength;
+      quizCard.style.backgroundColor = `rgba(248, 113, 113, ${bgAlpha})`; // red-ish
+      quizCard.style.borderColor = `rgba(239, 68, 68, ${borderAlpha})`;
+      return;
+    }
+
+    // それ以外は白に戻す
+    resetCardColor();
+  };
 
   // ---- タッチ操作（スマホ用） ----
 
@@ -347,9 +394,7 @@ function initQuestionEvents() {
       startX = t.clientX;
       startY = t.clientY;
       isTouching = true;
-
-      // 初期位置へ戻す
-      quizCard.style.transform = "translateX(0) rotate(0)";
+      resetCardColor();
     },
     { passive: true }
   );
@@ -362,18 +407,10 @@ function initQuestionEvents() {
       const dx = t.clientX - startX;
       const dy = t.clientY - startY;
 
-      const absX = Math.abs(dx);
-      const absY = Math.abs(dy);
-
-      // 横スワイプ優先時のみスクロールを殺しつつ追従
-      if (absX > absY) {
-        e.preventDefault(); // ネイティブスクロールを抑止
-        const maxTilt = 18;
-        const tilt = (dx / 200) * maxTilt;
-        quizCard.style.transform = `translateX(${dx}px) rotate(${tilt}deg)`;
-      }
+      // カラーだけ更新（スクロールは殺さない）
+      applySwipeColor(dx, dy);
     },
-    { passive: false }
+    { passive: true }
   );
 
   quizCard.addEventListener(
@@ -391,7 +428,7 @@ function initQuestionEvents() {
 
       // タップ扱い
       if (absX < 30 && absY < 30) {
-        quizCard.style.transform = "translateX(0) rotate(0)";
+        resetCardColor();
         return;
       }
 
@@ -417,15 +454,18 @@ function initQuestionEvents() {
       }
 
       if (!answer) {
-        // しきい値未満 → 元位置に戻す
-        quizCard.style.transform = "translateX(0) rotate(0)";
+        // しきい値未満 → 白に戻す
+        resetCardColor();
         return;
       }
 
-      if (!trainer || !currentSession || !currentQuestion) return;
+      if (!trainer || !currentSession || !currentQuestion) {
+        resetCardColor();
+        return;
+      }
 
-      // inline transform はアニメーション前にクリア
-      quizCard.style.transform = "";
+      // 回答確定時は色を一旦リセット（その後のエフェクトに任せる）
+      resetCardColor();
 
       if (direction) {
         animateSwipeAnswer(direction, () => handleAnswer(answer as UserAnswer));
@@ -449,10 +489,13 @@ function initQuestionEvents() {
       if (answer === "FOLD") direction = "left";
       if (answer === "CALL" || answer === "RAISE") direction = "right";
 
-      // ボタン回答でも軽くスワイプアウトさせる
       const card = document.getElementById("quizCard") as HTMLDivElement | null;
+      if (card) {
+        card.style.backgroundColor = "";
+        card.style.borderColor = "";
+      }
+
       if (card && direction) {
-        card.style.transform = "";
         animateSwipeAnswer(direction, () => handleAnswer(answer));
       } else {
         handleAnswer(answer);
