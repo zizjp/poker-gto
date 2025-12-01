@@ -1,6 +1,35 @@
 * {
   box-sizing: border-box;
 }
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden; /* 画面全体のスクロールを禁止 */
+}
+
+.app-root {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #020617;
+}
+
+.app-main {
+  flex: 1;
+  overflow-y: auto; /* 必要なら内部だけスクロール */
+  -webkit-overflow-scrolling: touch;
+}
+
+/* スワイプカード周りはネイティブスクロールさせない */
+.swipe-card-container {
+  touch-action: none; /* ブラウザ標準のスクロール・ジェスチャーを無効化 */
+}
+
+.swipe-card {
+  touch-action: none;
+}
 
 body {
   margin: 0;

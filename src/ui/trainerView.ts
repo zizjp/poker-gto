@@ -262,6 +262,15 @@ function initQuestionEvents() {
     { passive: true }
   );
 
+  // ★ スワイプ中にブラウザ側スクロールが動かないようにする
+  quizCard.addEventListener(
+    "touchmove",
+    (e) => {
+      e.preventDefault(); // JSで処理するのでネイティブスクロール禁止
+    },
+    { passive: false }
+  );
+
   quizCard.addEventListener(
     "touchend",
     (e) => {
@@ -299,6 +308,17 @@ function initQuestionEvents() {
     });
   });
 }
+
+  const buttons = document.querySelectorAll<HTMLButtonElement>(".answer-button");
+  buttons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const answer = btn.getAttribute("data-answer") as UserAnswer | null;
+      if (!answer) return;
+      if (currentSession && currentQuestion && trainer) {
+        handleAnswer(answer);
+      }
+    });
+  });
 
 function handleAnswer(answer: UserAnswer) {
   if (!trainer || !currentSession || !currentQuestion) return;

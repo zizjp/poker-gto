@@ -26,6 +26,8 @@ export function renderEditorView() {
     let activeRangeSet = findRangeSetById(rangeSets, settings.activeRangeSetId);
     if (!activeRangeSet) {
         activeRangeSet = rangeSets[0];
+        settings.activeRangeSetId = activeRangeSet.meta.id;
+        saveSettings(settings);
     }
     const rangeOptions = rangeSets
         .map((rs) => {
@@ -55,15 +57,35 @@ export function renderEditorView() {
     `;
     const handEditorHtml = activeScenario ? renderHandEditor(activeScenario) : "";
     const handGridHtml = activeScenario ? renderHandGridSection(activeScenario) : "";
+    const activeRangeSetName = activeRangeSet.meta.name;
+    const activeScenarioName = activeScenario ? activeScenario.name : "";
     return `
     <div class="section">
       <h3>レンジセット</h3>
+
       <div class="settings-row">
         <div class="label">選択中のレンジセット</div>
         <select id="editorRangeSetSelect" class="select">
           ${rangeOptions}
         </select>
       </div>
+
+      <!-- ★ 追加: レンジセット名の編集行 -->
+      <div class="settings-row">
+        <div class="label">レンジセット名</div>
+        <div class="row" style="gap:6px;">
+          <input
+            id="currentRangeSetNameInput"
+            class="input"
+            type="text"
+            value="${escapeHtml(activeRangeSetName)}"
+          />
+          <button id="saveRangeSetNameBtn" class="button button-secondary">
+            名前を保存
+          </button>
+        </div>
+      </div>
+
       <div class="settings-row">
         <input
           id="newRangeSetNameInput"
@@ -100,6 +122,27 @@ export function renderEditorView() {
         <select id="editorScenarioSelect" class="select">
           ${scenarioOptions || `<option value="">（シナリオなし）</option>`}
         </select>
+      </div>
+
+      <!-- ★ 追加: シナリオ名の編集行 -->
+      <div class="settings-row">
+        <div class="label">シナリオ名</div>
+        <div class="row" style="gap:6px;">
+          <input
+            id="currentScenarioNameInput"
+            class="input"
+            type="text"
+            value="${escapeHtml(activeScenarioName)}"
+            ${hasScenario ? "" : "disabled"}
+          />
+          <button
+            id="saveScenarioNameBtn"
+            class="button button-secondary"
+            ${hasScenario ? "" : "disabled"}
+          >
+            名前を保存
+          </button>
+        </div>
       </div>
 
       <div class="settings-row">
@@ -163,6 +206,13 @@ export function renderEditorView() {
     ${handEditorHtml}
     ${handGridHtml}
   `;
+}
+function escapeHtml(str) {
+    return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
 }
 function renderScenarioDetail(s) {
     const handCount = Object.keys(s.hands).length;
@@ -334,12 +384,41 @@ export function initEditorViewEvents() {
     const stackInput = document.getElementById("newScenarioStackSize");
     const createScenarioBtn = document.getElementById("createScenarioBtn");
     const deleteScenarioBtn = document.getElementById("deleteScenarioBtn");
+    // 名前編集用
+    const currentRangeSetNameInput = document.getElementById("currentRangeSetNameInput");
+    const saveRangeSetNameBtn = document.getElementById("saveRangeSetNameBtn");
+    const currentScenarioNameInput = document.getElementById("currentScenarioNameInput");
+    const saveScenarioNameBtn = document.getElementById("saveScenarioNameBtn");
     // レンジセット選択変更
     if (rangeSetSelect) {
         rangeSetSelect.addEventListener("change", () => {
             const settings = loadSettings();
             settings.activeRangeSetId = rangeSetSelect.value || null;
             settings.activeScenarioId = null;
+            saveSettings(settings);
+            rerenderEditorView();
+        });
+    }
+    // レンジセット名の保存
+    if (currentRangeSetNameInput && saveRangeSetNameBtn && rangeSetSelect) {
+        saveRangeSetNameBtn.addEventListener("click", () => {
+            const newName = currentRangeSetNameInput.value.trim();
+            if (!newName) {
+                alert("レンジセット名を入力してください。");
+                return;
+            }
+            const rangeSetId = rangeSetSelect.value;
+            const rangeSets = loadRangeSets();
+            const target = findRangeSetById(rangeSets, rangeSetId);
+            if (!target) {
+                alert("レンジセットが見つかりません。");
+                return;
+            }
+            target.meta.name = newName;
+            target.meta.updatedAt = new Date().toISOString();
+            saveRangeSets(rangeSets);
+            const settings = loadSettings();
+            settings.activeRangeSetId = rangeSetId;
             saveSettings(settings);
             rerenderEditorView();
         });
@@ -483,6 +562,37 @@ export function initEditorViewEvents() {
                 alert("ファイルの読み込み中にエラーが発生しました。");
             };
             reader.readAsText(file);
+        });
+    }
+    // シナリオ名の保存
+    if (currentScenarioNameInput && saveScenarioNameBtn && rangeSetSelect && scenarioSelect) {
+        saveScenarioNameBtn.addEventListener("click", () => {
+            const newName = currentScenarioNameInput.value.trim();
+            if (!newName) {
+                alert("シナリオ名を入力してください。");
+                return;
+            }
+            const rangeSetId = rangeSetSelect.value;
+            const scenarioId = scenarioSelect.value;
+            const rangeSets = loadRangeSets();
+            const target = findRangeSetById(rangeSets, rangeSetId);
+            if (!target) {
+                alert("レンジセットが見つかりません。");
+                return;
+            }
+            const scenario = findScenarioById(target, scenarioId);
+            if (!scenario) {
+                alert("シナリオが見つかりません。");
+                return;
+            }
+            scenario.name = newName;
+            target.meta.updatedAt = new Date().toISOString();
+            saveRangeSets(rangeSets);
+            const settings = loadSettings();
+            settings.activeRangeSetId = rangeSetId;
+            settings.activeScenarioId = scenarioId;
+            saveSettings(settings);
+            rerenderEditorView();
         });
     }
     // シナリオ選択変更
