@@ -320,10 +320,37 @@ function initQuestionEvents() {
     });
   });
 
+  function playAnswerEffect(isCorrect: boolean) {
+  const card = document.getElementById("quizCard") as HTMLDivElement | null;
+  if (!card) return;
+
+  const correctClass = "swipe-card-correct";
+  const wrongClass = "swipe-card-wrong";
+
+  // 既存のアニメーションクラスを一旦外す
+  card.classList.remove(correctClass, wrongClass);
+
+  // reflow してアニメーションを毎回リスタートさせるおまじない
+  void card.offsetWidth;
+
+  const targetClass = isCorrect ? correctClass : wrongClass;
+  card.classList.add(targetClass);
+
+  const handleAnimationEnd = () => {
+    card.classList.remove(targetClass);
+    card.removeEventListener("animationend", handleAnimationEnd);
+  };
+
+  card.addEventListener("animationend", handleAnimationEnd);
+}
+
 function handleAnswer(answer: UserAnswer) {
   if (!trainer || !currentSession || !currentQuestion) return;
 
   const result = trainer.answerQuestion(currentSession, currentQuestion, answer);
+
+  // ✅ 正解 → 緑の光 / 不正解 → 赤シェイク
+  playAnswerEffect(result.isCorrect);
 
   const quizArea = document.getElementById("trainerQuizArea");
   if (!quizArea) return;
