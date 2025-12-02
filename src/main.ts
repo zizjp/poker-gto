@@ -11,7 +11,10 @@ import { renderSettingsView, initSettingsViewEvents } from "./ui/settingsView";
 
 type TabId = "trainer" | "stats" | "editor" | "settings";
 
+console.log("[main] module loaded");
+
 function createLayout() {
+  console.log("[main] createLayout");
   const app = document.getElementById("app");
   if (!app) return;
 
@@ -63,26 +66,34 @@ function setActiveTab(tab: TabId) {
 }
 
 function renderTab(tab: TabId) {
+  console.log("[main] renderTab", tab);
   const main = document.getElementById("main");
-  if (!main) return;
+  if (!main) {
+    console.log("[main] #main not found");
+    return;
+  }
 
   switch (tab) {
     case "trainer": {
+      console.log("[main] render trainer");
       main.innerHTML = renderTrainerView();
       initTrainerViewEvents();
       break;
     }
     case "stats": {
+      console.log("[main] render stats");
       main.innerHTML = renderStatsView();
       initStatsViewEvents();
       break;
     }
     case "editor": {
+      console.log("[main] render editor");
       main.innerHTML = renderEditorView();
       initEditorViewEvents();
       break;
     }
     case "settings": {
+      console.log("[main] render settings");
       main.innerHTML = renderSettingsView();
       initSettingsViewEvents();
       break;
@@ -93,6 +104,7 @@ function renderTab(tab: TabId) {
 }
 
 function initTabBar() {
+  console.log("[main] initTabBar");
   const trainerBtn = document.getElementById("tab-trainer");
   const statsBtn = document.getElementById("tab-stats");
   const editorBtn = document.getElementById("tab-editor");
@@ -113,24 +125,27 @@ function initTabBar() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  console.log("[main] DOMContentLoaded");
+
   // レイアウトを構築（#app の中身を丸ごと作る）
   createLayout();
 
   // Trainer の内部状態初期化
+  console.log("[main] initTrainerInstance");
   initTrainerInstance();
 
   // タブバーのイベント紐付け
+  console.log("[main] initTabBar call");
   initTabBar();
 
   // 初期タブ（トレーナー）
+  console.log("[main] initial renderTab(trainer)");
   renderTab("trainer");
 });
 
 // ===== Service Worker registration =====
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    // 現在のURLを基準に sw.js への相対パスを解決
-    // 例: https://username.github.io/poker-gto/ → https://username.github.io/poker-gto/sw.js
     const swUrl = new URL("sw.js", window.location.href).toString();
 
     navigator.serviceWorker

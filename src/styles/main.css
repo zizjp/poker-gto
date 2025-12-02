@@ -94,6 +94,8 @@ nav button.active,
   color: #2563eb;
 }
 
+/* 汎用セクション */
+
 .section {
   background: #ffffff;
   border-radius: 12px;
@@ -150,7 +152,7 @@ nav button.active,
   flex: 1;
 }
 
-/* swipe card */
+/* ==== トレーナー：スワイプカード周り（コンテナ＆ヒント＆ボタン） ==== */
 
 .swipe-card-container {
   display: flex;
@@ -158,31 +160,6 @@ nav button.active,
   align-items: center;
   gap: 12px;
   touch-action: pan-y; /* 縦スクロールは許可、横はJSで解釈 */
-}
-
-.swipe-card {
-  width: 90%;
-  max-width: 360px;
-  height: 200px;
-  border-radius: 16px;
-  background: #ffffff;
-  box-shadow: 0 10px 30px rgb(15 23 42 / 0.15);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 40px;
-  font-weight: 700;
-  letter-spacing: 2px;
-  user-select: none;
-  touch-action: pan-y;
-
-  /* カードの基本トランジション（移動・透過・影・枠・背景色） */
-  transition:
-    transform 0.25s ease-out,
-    opacity 0.25s ease-out,
-    box-shadow 0.25s ease-out,
-    border-color 0.25s ease-out,
-    background-color 0.2s ease-out;
 }
 
 .swipe-hints {
@@ -199,7 +176,61 @@ nav button.active,
   text-align: center;
 }
 
-/* feedback overlay */
+/* ===== Trainer Quiz: PCボタン ===== */
+
+.trainer-quiz__buttons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  width: 90%;
+  max-width: 360px;
+  margin: 0 auto;
+  margin-top: 12px;
+}
+
+.trainer-quiz-btn {
+  border-radius: 999px;
+  padding: 10px 12px;
+  border: none;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #f9fafb;
+  cursor: pointer;
+
+  transition:
+    transform 0.08s ease-out,
+    box-shadow 0.08s ease-out,
+    opacity 0.1s ease-out;
+}
+
+.trainer-quiz-btn:not(:disabled):active {
+  transform: scale(0.97);
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.5);
+}
+
+.trainer-quiz-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+  transform: none;
+  box-shadow: none;
+}
+
+/* RAISE = 赤 */
+.trainer-quiz-btn--raise {
+  background: #dc2626;
+}
+
+/* FOLD = 青 */
+.trainer-quiz-btn--fold {
+  background: #2563eb;
+}
+
+/* CALL = 緑 */
+.trainer-quiz-btn--call {
+  background: #16a34a;
+}
+
+/* ==== フィードバックオーバーレイ ==== */
 
 .feedback-overlay {
   position: fixed;
@@ -244,7 +275,7 @@ nav button.active,
   color: #6b7280;
 }
 
-/* session result */
+/* ==== セッション結果 ==== */
 
 .session-summary {
   text-align: center;
@@ -259,7 +290,7 @@ nav button.active,
   margin: 4px 0;
 }
 
-/* settings */
+/* ==== 設定画面周り ==== */
 
 .settings-row {
   margin-bottom: 12px;
@@ -281,48 +312,7 @@ nav button.active,
   gap: 4px;
 }
 
-/* answer buttons for PC */
-
-.answer-buttons {
-  display: flex;
-  gap: 8px;
-  width: 90%;
-  max-width: 360px;
-  margin-top: 8px;
-}
-
-.answer-button {
-  flex: 1;
-  padding: 8px 0;
-  border-radius: 999px;
-  border: none;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.answer-button-fold {
-  background: #fee2e2;
-  color: #b91c1c;
-}
-
-.answer-button-call {
-  background: #dbeafe;
-  color: #1d4ed8;
-}
-
-.answer-button-raise {
-  background: #dcfce7;
-  color: #15803d;
-}
-
-.answer-helper {
-  font-size: 11px;
-  color: #6b7280;
-  margin: 4px 0 0;
-}
-
-/* hand accordion */
+/* ==== ハンド編集のアコーディオン ==== */
 
 .hand-editor-section-title {
   font-size: 14px;
@@ -404,7 +394,7 @@ nav button.active,
   border-radius: 999px;
 }
 
-/* hand grid (13x13) */
+/* ==== ハンドグリッド (13x13) ==== */
 
 .hand-grid-section-title {
   font-size: 14px;
@@ -454,70 +444,581 @@ nav button.active,
   filter: brightness(0.97);
 }
 
-/* ==== スワイプカードのアニメーション ==== */
+/* ===== React版 SwipeCard ===== */
 
-/* スワイプアウト用 */
-.swipe-card--leave-left {
-  transform: translateX(-140%) rotate(-20deg);
-  opacity: 0;
+.swipe-card-wrapper {
+  position: relative;
+  width: 100%;
+  touch-action: none; /* スワイプを優先（iOS Safari 向け） */
 }
 
-.swipe-card--leave-right {
-  transform: translateX(140%) rotate(20deg);
-  opacity: 0;
+/* ここは「当たり判定＋transform担当」の透明な枠にする */
+.swipe-card {
+  position: relative;
+  width: 100%;
+  max-width: 360px;
+  min-height: 200px;
+  margin: 0 auto;
+  border-radius: 20px;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  box-shadow: none;
+  transition:
+    transform 0.15s ease-out;
+  will-change: transform;
+  overflow: visible;
 }
 
-.swipe-card--reset {
-  transform: translateX(0) rotate(0);
-  opacity: 1;
+/* ドラッグ中も .swipe-card 自体には影を付けない */
+.swipe-card--dragging {
+  transition: none;
 }
 
-/* 正解 → 緑の光 */
-@keyframes swipeCardCorrectGlow {
+.swipe-card__tint {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  /* 後で mix-blend-mode: screen; など試しても良い */
+}
+
+/* ===== AnswerEffect（iOSミニマル風） ===== */
+
+.answer-effect-overlay {
+  /* ほんのり背景を柔らかくする */
+  background: radial-gradient(circle at top, rgba(15, 23, 42, 0.35), rgba(15, 23, 42, 0.75));
+  backdrop-filter: blur(4px);
+}
+
+/* ベースとなるフィードバックボックス */
+.answer-effect-box {
+  position: relative;
+  width: 100%;            /* クイズカードと同じ幅ルール */
+  max-width: 360px;       /* クイズカードと同じ最大幅 */
+  margin: 0 auto;         /* 中央寄せ */
+
+  border-radius: 18px;
+  padding: 18px 16px 16px;
+  background: rgba(248, 250, 252, 0.96);
+  box-shadow:
+    0 18px 40px rgba(15, 23, 42, 0.35),
+    0 0 0 1px rgba(148, 163, 184, 0.15);
+}
+
+/* 上に丸アイコンをちょっと浮かせる */
+.answer-effect-icon-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+.answer-effect-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+  background: #e5e7eb;
+  color: #0f172a;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.25);
+}
+
+/* 正解用アイコン */
+.answer-effect-icon--correct {
+  background: radial-gradient(circle at 30% 0%, #bbf7d0, #22c55e);
+  color: #f9fafb;
+}
+
+/* 不正解用アイコン */
+.answer-effect-icon--wrong {
+  background: radial-gradient(circle at 30% 0%, #fecaca, #ef4444);
+  color: #fef2f2;
+}
+
+/* 正解: 緑の柔らかいグロー + ポップ */
+.answer-effect-box--correct {
+  animation: answer-success-pop 0.28s ease-out;
+}
+
+/* 不正解: 赤みのある軽いフラッシュ */
+.answer-effect-box--wrong {
+  animation: answer-error-flash 0.22s ease-out;
+}
+
+/* 正解アニメーション（スケール＋グロー） */
+@keyframes answer-success-pop {
   0% {
-    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
-    border-color: #e5e7eb;
-  }
-  40% {
-    box-shadow: 0 0 16px 4px rgba(34, 197, 94, 0.8);
-    border-color: #22c55e;
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
-    border-color: #e5e7eb;
-  }
-}
-
-.swipe-card-correct {
-  animation: swipeCardCorrectGlow 0.45s ease-out;
-}
-
-/* 不正解 → 赤シェイク */
-@keyframes swipeCardWrongShake {
-  0% {
-    transform: translateX(0);
-  }
-  15% {
-    transform: translateX(-8px);
-  }
-  30% {
-    transform: translateX(8px);
-  }
-  45% {
-    transform: translateX(-6px);
+    transform: translateY(4px) scale(0.96);
+    box-shadow:
+      0 0 0 0 rgba(34, 197, 94, 0.0),
+      0 10px 24px rgba(15, 23, 42, 0.3);
   }
   60% {
-    transform: translateX(6px);
-  }
-  75% {
-    transform: translateX(-4px);
+    transform: translateY(0) scale(1.02);
+    box-shadow:
+      0 0 24px 0 rgba(34, 197, 94, 0.6),
+      0 18px 40px rgba(15, 23, 42, 0.4);
   }
   100% {
-    transform: translateX(0);
+    transform: translateY(0) scale(1.0);
+    box-shadow:
+      0 0 10px 0 rgba(34, 197, 94, 0.2),
+      0 14px 32px rgba(15, 23, 42, 0.35);
   }
 }
 
-.swipe-card-wrong {
-  animation: swipeCardWrongShake 0.35s ease-in-out;
-  border-color: #ef4444;
+/* 不正解アニメーション（控えめな赤フラッシュ） */
+@keyframes answer-error-flash {
+  0% {
+    transform: translateY(0) scale(1.0);
+    box-shadow:
+      0 0 0 0 rgba(248, 113, 113, 0),
+      0 14px 32px rgba(15, 23, 42, 0.35);
+    background: rgba(248, 250, 252, 0.96);
+  }
+  45% {
+    transform: translateY(-1px) scale(1.01);
+    box-shadow:
+      0 0 16px 0 rgba(248, 113, 113, 0.7),
+      0 18px 40px rgba(15, 23, 42, 0.45);
+    background: rgba(254, 242, 242, 0.98);
+  }
+  100% {
+    transform: translateY(0) scale(1.0);
+    box-shadow:
+      0 0 8px 0 rgba(248, 113, 113, 0.25),
+      0 14px 32px rgba(15, 23, 42, 0.35);
+    background: rgba(248, 250, 252, 0.96);
+  }
+}
+
+/* ===== カードが飛ぶアニメーション ===== */
+
+.swipe-card--fly-left {
+  animation: swipeFlyLeft 0.35s ease-out forwards;
+}
+
+.swipe-card--fly-right {
+  animation: swipeFlyRight 0.35s ease-out forwards;
+}
+
+.swipe-card--fly-up {
+  animation: swipeFlyUp 0.35s ease-out forwards;
+}
+
+.swipe-card--fly-down {
+  animation: swipeFlyDown 0.35s ease-out forwards;
+}
+
+/* 左へ消える */
+@keyframes swipeFlyLeft {
+  to {
+    transform: translateX(-160%) rotate(-20deg);
+    opacity: 0;
+  }
+}
+
+/* 右へ消える */
+@keyframes swipeFlyRight {
+  to {
+    transform: translateX(160%) rotate(20deg);
+    opacity: 0;
+  }
+}
+
+/* 上へ消える */
+@keyframes swipeFlyUp {
+  to {
+    transform: translateY(-160%) rotate(0deg);
+    opacity: 0;
+  }
+}
+
+/* 下へ消える（ほぼ使わないけど上下CALL対応で入れておく） */
+@keyframes swipeFlyDown {
+  to {
+    transform: translateY(160%) rotate(0deg);
+    opacity: 0;
+  }
+}
+
+/* ==== Trainer 用カードUI ==== */
+
+.trainer-quiz-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  margin-top: 0;
+}
+
+.trainer-quiz-card-area {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin: 8px 0;   /* ← これ追加（上下に8px） */
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/* 実際のカード本体（iOSカード風） */
+.trainer-card {
+  width: 100%;
+  max-width: 360px;
+  margin: 0 auto;
+  border-radius: 18px;
+  background: rgba(248, 250, 252, 0.96); /* .answer-effect-box と同系統 */
+  color: #0f172a;
+  padding: 18px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow:
+    0 18px 40px rgba(15, 23, 42, 0.35),
+    0 0 0 1px rgba(148, 163, 184, 0.15); /* AnswerEffect と揃える */
+}
+
+/* ドラッグ中だけ、内側カードの影を少しだけ強くする */
+.swipe-card--dragging .trainer-card {
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.32);
+}
+
+.trainer-card__top {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+}
+
+/* シナリオ名のタグ */
+.range-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  background: rgba(59, 130, 246, 0.1);
+  color: #1d4ed8;
+}
+
+/* ハンド表示エリア */
+.trainer-card__center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* ハンド表示（カード2枚＋スート記号） */
+.hand-display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.hand-display--fallback {
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+/* 個々のカード表示（トランプ風） */
+.hand-card {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 64px;      /* 52 → 64 */
+  min-height: 80px;     /* 64 → 80 */
+  padding: 6px 10px;    /* ちょい増やす */
+  border-radius: 12px;
+  background: #ffffff;
+  color: #111827;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.2);
+  font-weight: 800;
+  font-size: 1.6rem;    /* 1.4 → 1.6 */
+  letter-spacing: 0.05em;
+}
+
+.hand-card__rank {
+  line-height: 1;
+}
+
+.hand-card__suit {
+  font-size: 1.2rem;  /* 1.1 → 1.2 に上げるとバランス良い */
+  line-height: 1.1;
+}
+
+/* スート別の色味調整 */
+/* ♠（黒〜ダークグレー） */
+.hand-card--spade {
+  color: #374151; /* gray-700 */
+}
+
+/* ♥（赤） */
+.hand-card--heart {
+  color: #dc2626; /* red-600 */
+}
+
+/* ♦（青、Wizardリスペクト） */
+.hand-card--diamond {
+  color: #2563eb; /* blue-600 */
+}
+
+/* ♣（明るい緑） */
+.hand-card--club {
+  color: #16a34a; /* green-600 */
+}
+
+/* 下部の情報エリア */
+.trainer-card__bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  text-align: center;
+}
+
+.trainer-card__spot {
+  color: #6b7280;
+}
+
+.trainer-card__hint {
+  color: #9ca3af;
+}
+
+/* クイズ画面の下部アクションエリア */
+.trainer-quiz-actions {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+/* ===== カード出現（フェードイン + スケール） ===== */
+
+@keyframes trainerCardFadeIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.01);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1.0);
+  }
+}
+
+/* 新規描画されるたびにこのクラスを付けてアニメ再生する */
+.trainer-card--appear {
+  animation: trainerCardFadeIn 0.22s ease-out;
+}
+
+/* ===== Trainer Config (iOS Style) ===== */
+
+.trainer-config {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 0;
+}
+
+/* 共通カード */
+.config-card {
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 14px 16px;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06);
+}
+
+.config-card__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 6px;
+}
+
+/* セレクト */
+.config-select {
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 14px;
+  border-radius: 12px;
+  border: 1px solid #d1d5db;
+  background: #f9fafb;
+  color: #111827;
+}
+
+/* 復習モードカード */
+.review-card {
+  border-left: 4px solid #22c55e;
+}
+
+.review-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #16a34a;
+  margin-bottom: 6px;
+}
+
+.review-body {
+  font-size: 12px;
+  color: #374151;
+  line-height: 1.4;
+}
+
+/* クイズ開始ボタン（iOS 風 CTA） */
+.config-start-btn {
+  margin-top: 6px;
+  padding: 12px 18px;
+  background: #2563eb;
+  border-radius: 999px;
+  width: 100%;
+  border: none;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+  cursor: pointer;
+  transition:
+    transform 0.08s ease-out,
+    box-shadow 0.1s ease-out;
+}
+
+.config-start-btn:active {
+  transform: scale(0.97);
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+}
+
+/* 説明文（iOS風の薄いテキスト） */
+.config-desc {
+  margin-top: 6px;
+  padding-left: 2px;
+  font-size: 12px;
+  color: #6b7280; /* gray-500 */
+  line-height: 1.4;
+}
+
+/* ===== Tag (iOS small rounded label) ===== */
+.tag {
+  display: inline-block;
+  padding: 3px 8px;
+  font-size: 11px;
+  border-radius: 999px;
+  background: #f3f4f6; /* gray-100 */
+  color: #374151; /* gray-700 */
+  border: 1px solid #e5e7eb; /* gray-200 */
+  margin-right: 6px;
+  margin-top: 4px;
+}
+
+.tag-row {
+  margin-top: 6px;
+  margin-bottom: 4px;
+}
+
+/* ===== Hero Section (Start Quiz) ===== */
+
+.config-hero {
+  margin-top: 8px;
+  padding: 18px 16px 22px;
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+  text-align: center;
+}
+
+.config-hero-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1f2937; /* gray-800 */
+  margin-bottom: 10px;
+}
+
+.config-hero-summary {
+  font-size: 13px;
+  color: #4b5563; /* gray-600 */
+  line-height: 1.4;
+  margin-bottom: 16px;
+}
+
+.config-hero-label {
+  font-weight: 600;
+  color: #6b7280; /* gray-500 */
+  margin-right: 4px;
+}
+
+.config-hero-value {
+  font-weight: 700;
+  color: #1f2937; /* gray-800 */
+}
+
+/* ===== Icons (iOS style sizing) ===== */
+
+.config-icon {
+  font-size: 1.1rem;
+  margin-right: 6px;
+  vertical-align: -1px; /* テキストと高さ合わせ */
+}
+
+.review-title .config-icon {
+  font-size: 1.2rem;
+}
+
+.config-icon-large {
+  font-size: 1.4rem;
+  margin-right: 6px;
+  vertical-align: -2px;
+}
+
+/* ===== Screen Transition (Fade) ===== */
+
+.fade-panel {
+  transition: opacity 0.25s ease-out, transform 0.25s ease-out;
+  will-change: opacity, transform;
+}
+
+/* アクティブなとき */
+.fade-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* 非アクティブなとき */
+.fade-out {
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none; /* 隠れている画面はクリック不可にする */
+}
+/* ===== Trainer Layout (vertical balance) ===== */
+
+.section-trainer {
+  padding: 0;       /* 内側余白ゼロ */
+  margin: 0;        /* 外側余白ゼロ */
+  box-shadow: none; /* 影を消す */
+  background: none; /* 背景の白ボックスを削除 */
+}
+
+.section-trainer > h3 {
+  margin-bottom: 8px;
+}
+
+.section-trainer-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center; /* 中身を縦方向ほぼ中央に寄せる */
+}
+
+/* クイズカードとフィードバック箱の高さをそろえる */
+.trainer-card,
+.answer-effect-box {
+  min-height: 180px;
 }

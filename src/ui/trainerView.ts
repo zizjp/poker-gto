@@ -1,3 +1,4 @@
+import { initTrainerReact } from "../react/trainer/initTrainerReact";
 import { loadSettings, saveSettings } from "../core/settings";
 import { loadRangeSets } from "../core/ranges";
 import { Trainer } from "../core/trainer";
@@ -39,102 +40,10 @@ export function refreshTrainerConfig() {
 // ==========================
 
 export function renderTrainerView(): string {
-  const settings = loadSettings();
-  const rangeSets = loadRangeSets();
-
-  if (!trainer) {
-    trainer = new Trainer(settings, rangeSets);
-  } else {
-    trainer.updateConfig(settings, rangeSets);
-  }
-
-  // アクティブレンジセットを決定（なければ先頭）
-  let activeRangeSet =
-    rangeSets.find((rs) => rs.meta.id === settings.activeRangeSetId) ?? null;
-  if (!activeRangeSet && rangeSets.length > 0) {
-    activeRangeSet = rangeSets[0];
-    settings.activeRangeSetId = activeRangeSet.meta.id;
-    saveSettings(settings);
-  }
-
-  // アクティブシナリオ決定（なければ先頭）
-  let activeScenario = activeRangeSet
-    ? activeRangeSet.scenarios.find((sc) => sc.id === settings.activeScenarioId) ?? null
-    : null;
-
-  if (activeRangeSet && !activeScenario && activeRangeSet.scenarios.length > 0) {
-    activeScenario = activeRangeSet.scenarios[0];
-    settings.activeScenarioId = activeScenario.id;
-    saveSettings(settings);
-  }
-
-  const rangeSetOptions = rangeSets
-    .map((rs) => {
-      const selected = activeRangeSet && rs.meta.id === activeRangeSet.meta.id ? "selected" : "";
-      return `<option value="${rs.meta.id}" ${selected}>${rs.meta.name}</option>`;
-    })
-    .join("");
-
-  const scenarioOptions = activeRangeSet
-    ? activeRangeSet.scenarios
-        .map((sc) => {
-          const selected = activeScenario && sc.id === activeScenario.id ? "selected" : "";
-          return `<option value="${sc.id}" ${selected}>${sc.name}</option>`;
-        })
-        .join("")
-    : "";
-
-  const hasScenario = !!(activeRangeSet && activeScenario);
-
-  // 復習モードがセットされているかの簡易表示
-  const reviewHandsStr = window.localStorage.getItem(REVIEW_HANDS_KEY);
-  let reviewInfoHtml = "";
-  if (reviewHandsStr) {
-    try {
-      const hands = JSON.parse(reviewHandsStr) as HandCode[];
-      if (hands && hands.length > 0) {
-        reviewInfoHtml = `
-          <p style="font-size:11px;color:#22c55e;margin-top:4px;">
-            苦手ハンド復習モードが有効です（${hands.length} ハンド）。<br>
-            この状態でクイズ開始すると、これらのハンドのみが出題されます。
-          </p>
-        `;
-      }
-    } catch {
-      // 無視
-    }
-  }
-
+  console.log("[trainerView] renderTrainerView called");
+  // ここは「React を差し込むための空きスペース」を返すだけにする
   return `
-    <div class="section">
-      <h3>プリフロップトレーナー</h3>
-      <div class="settings-row">
-        <div class="label">レンジセット</div>
-        <select id="trainerRangeSetSelect" class="select">
-          ${rangeSetOptions}
-        </select>
-      </div>
-      <div class="settings-row">
-        <div class="label">シナリオ</div>
-        <select id="trainerScenarioSelect" class="select">
-          ${
-            scenarioOptions ||
-            `<option value="">（このレンジセットにはシナリオがありません）</option>`
-          }
-        </select>
-      </div>
-      <button id="startQuizBtn" class="button">
-        クイズ開始
-      </button>
-      ${
-        !hasScenario
-          ? `<p style="font-size:12px;color:#ef4444;margin-top:4px;">※ シナリオが未選択か存在しません。エディターで作成してください。</p>`
-          : ""
-      }
-      ${reviewInfoHtml}
-    </div>
-
-    <div id="trainerQuizArea"></div>
+    <div id="trainerReactRoot"></div>
   `;
 }
 
@@ -143,34 +52,16 @@ export function renderTrainerView(): string {
 // ==========================
 
 export function initTrainerViewEvents() {
-  const rangeSetSelect = document.getElementById("trainerRangeSetSelect") as HTMLSelectElement | null;
-  const scenarioSelect = document.getElementById("trainerScenarioSelect") as HTMLSelectElement | null;
-  const startBtn = document.getElementById("startQuizBtn") as HTMLButtonElement | null;
-
-  if (rangeSetSelect) {
-    rangeSetSelect.addEventListener("change", () => {
-      const settings = loadSettings();
-      settings.activeRangeSetId = rangeSetSelect.value || null;
-      settings.activeScenarioId = null; // レンジ変更時はシナリオリセット
-      saveSettings(settings);
-      rerenderTrainerView();
-    });
+  console.log("[trainerView] initTrainerViewEvents called");
+  const container = document.getElementById("trainerReactRoot");
+  if (!container) {
+    console.log("[trainerView] trainerReactRoot not found");
+    return;
   }
 
-  if (scenarioSelect) {
-    scenarioSelect.addEventListener("change", () => {
-      const settings = loadSettings();
-      settings.activeScenarioId = scenarioSelect.value || null;
-      saveSettings(settings);
-      rerenderTrainerView();
-    });
-  }
-
-  if (startBtn) {
-    startBtn.addEventListener("click", () => {
-      startSession();
-    });
-  }
+  console.log("[trainerView] initTrainerReact start");
+  // ここで React をマウント
+  initTrainerReact(container);
 }
 
 // ==========================
