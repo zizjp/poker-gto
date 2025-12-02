@@ -1,16 +1,15 @@
 import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react-swc";
 import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
   base: "/poker-gto/",
-
   plugins: [
+    react(), // ★ 追加
     VitePWA({
       registerType: "autoUpdate",
-      // manifest は自前の manifest.webmanifest を使うので false
       manifest: false,
       workbox: {
-        // dist 配下の静的ファイルを全部キャッシュ
         globPatterns: ["**/*.{js,css,html,ico,png,svg}"]
       }
     })
