@@ -1,3 +1,7 @@
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import { EditorRoot } from '../ranges/EditorRoot';
+
 import { loadSettings, saveSettings } from "../core/settings";
 import {
   loadRangeSets,
@@ -14,6 +18,13 @@ import type {
   HandCode,
   HandDecision
 } from "../core/types";
+
+export function initEditorReact() {
+  const rootEl = document.getElementById('editor-react-root');
+  if (!rootEl) return;
+  const root = ReactDOM.createRoot(rootEl);
+  root.render(React.createElement(EditorRoot));
+}
 
 const POSITIONS: Position[] = ["UTG", "UTG+1", "MP", "HJ", "CO", "BTN", "SB", "BB"];
 
@@ -236,7 +247,12 @@ export function renderEditorView(): string {
     ${scenarioDetailHtml}
     ${handEditorHtml}
     ${handGridHtml}
-  `;
+    
+    <div class="section">
+      <h3>レンジビジュアライザー（React版）</h3>
+      <div id="editor-react-root" class="editor-react-root"></div>
+    </div>
+    `;
 }
 
 function escapeHtml(str: string): string {
@@ -785,6 +801,9 @@ export function initEditorViewEvents() {
 
   // hand grid のグローバルイベントを一度だけ貼る
   initGlobalHandGridEvents();
+
+  // React レンジビジュアライザーをマウント
+  initEditorReact();
 }
 
 function initHandEditorEvents(

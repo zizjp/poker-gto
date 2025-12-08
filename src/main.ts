@@ -109,7 +109,6 @@ function initTabBar() {
   const statsBtn = document.getElementById("tab-stats");
   const editorBtn = document.getElementById("tab-editor");
   const settingsBtn = document.getElementById("tab-settings");
-
   if (trainerBtn) {
     trainerBtn.addEventListener("click", () => renderTab("trainer"));
   }
@@ -123,6 +122,18 @@ function initTabBar() {
     settingsBtn.addEventListener("click", () => renderTab("settings"));
   }
 }
+
+// ★★ ここからこのブロックを追加 ★★
+window.addEventListener("poker-gto:switch-tab", (e: Event) => {
+  const custom = e as CustomEvent<string>;
+  const target = custom.detail;
+
+  // 型安全のため一応チェックしてから
+  const tabs: TabId[] = ["trainer", "stats", "editor", "settings"];
+  if (tabs.includes(target as TabId)) {
+    renderTab(target as TabId);
+  }
+});
 
 document.addEventListener("DOMContentLoaded", () => {
   console.log("[main] DOMContentLoaded");

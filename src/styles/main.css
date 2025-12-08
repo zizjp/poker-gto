@@ -1022,3 +1022,13 @@ nav button.active,
 .answer-effect-box {
   min-height: 180px;
 }
+
+.editor-save-btn[disabled] {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.editor-dirty-label {
+  font-size: 11px;
+  color: #fbbf24;
+}
