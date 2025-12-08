@@ -44,34 +44,6 @@ export interface RangeSet {
   scenarios: RangeScenario[];
 }
 
-// レンジ強度カテゴリキー
-export type RangeCategoryKey = "premium" | "strong" | "medium" | "speculative";
-
-// 1ポジション分のカテゴリごとのハンドバケット
-export interface PositionCategoryBuckets {
-  position: Position;
-  buckets: Record<RangeCategoryKey, Hand[]>;
-}
-
-// RangeData に将来使うカテゴリ情報をぶら下げてもOK
-export interface RangeDataMetadata {
-  lastModified?: string;
-  author?: string;
-  description?: string;
-  categories?: Partial<Record<RangeCategoryKey, string>>;
-}
-
-export interface RangeData {
-  version: string;
-  gameType: GameType;
-  stackSize: number;      // BB単位 (例: 100)
-  rake: number;           // % (例: 10)
-  ranges: PositionRange[];
-  metadata?: RangeDataMetadata;
-  // 将来: JSON側の positions.* をここにマップしてもいい
-  // categoryBucketsByPosition?: PositionCategoryBuckets[];
-}
-
 // ---- 設定・スコープ ----
 
 export type JudgeMode = "FREQUENCY" | "PROBABILISTIC";
