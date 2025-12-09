@@ -7,6 +7,8 @@ import type {
   RangeData,
   EquityMatrix,
   Rank,
+  HandCategoryIndex,
+  RangeCategoryKey,
 } from './types';
 import { RANKS, getHandAt } from './handUtils';
 import {
@@ -29,9 +31,16 @@ interface RangeGridProps {
   externalRangeData?: RangeData;
   onRangeChange?: (data: RangeData) => void;
 
-  // ★ ここを追加
+  // Trainer / Editor からのフォーカス指定
   focusPosition?: Position;
   focusHand?: Hand;
+
+  /**
+   * 任意: position + handCode からカテゴリを引くためのインデックス。
+   *
+   * handCategoryIndex[Position]["AKs"] => "premium" | "strong" | ...
+   */
+  handCategoryIndex?: HandCategoryIndex;
 }
 
 export const RangeGrid: React.FC<RangeGridProps> = ({
@@ -39,6 +48,7 @@ export const RangeGrid: React.FC<RangeGridProps> = ({
   onRangeChange,
   focusPosition,
   focusHand,
+  handCategoryIndex,
 }) => {
   const [innerRangeData, setInnerRangeData] = useState<RangeData | null>(
     externalRangeData ?? null,
@@ -52,7 +62,7 @@ export const RangeGrid: React.FC<RangeGridProps> = ({
   const [hoveredHand, setHoveredHand] = useState<Hand | null>(
     focusHand ?? null,
   );
-  const [lastEditedHand, setLastEditedHand] = useState<Hand | null>(null); // ★ 追加
+  const [lastEditedHand, setLastEditedHand] = useState<Hand | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(
     null,
@@ -82,7 +92,6 @@ export const RangeGrid: React.FC<RangeGridProps> = ({
         if (!externalRangeData) {
           setInnerRangeData(ranges);
         }
-
         setEquityMatrix(matrix);
       } catch (error) {
         // eslint-disable-next-line no-console
@@ -104,7 +113,7 @@ export const RangeGrid: React.FC<RangeGridProps> = ({
     };
   }, [externalRangeData]);
 
-    useEffect(() => {
+  useEffect(() => {
     // Trainer や EditorRoot からフォーカス指定が来たときに反映
     if (focusPosition) {
       setSelectedPosition(focusPosition);
@@ -113,7 +122,6 @@ export const RangeGrid: React.FC<RangeGridProps> = ({
       setHoveredHand(focusHand);
     }
   }, [focusPosition, focusHand]);
-
 
   const heroHand = hoveredHand;
 
@@ -135,6 +143,7 @@ export const RangeGrid: React.FC<RangeGridProps> = ({
           selectedPosition,
           hand,
         );
+
         switch (action) {
           case 'open':
             openCount += 1;
@@ -199,6 +208,7 @@ export const RangeGrid: React.FC<RangeGridProps> = ({
         : null;
 
     let vsRange: number | null = null;
+
     if (rangeData) {
       const posRange = rangeData.ranges.find(
         (r: { position: Position }) =>
@@ -208,6 +218,7 @@ export const RangeGrid: React.FC<RangeGridProps> = ({
       if (openHands.length > 0) {
         let total = 0;
         let count = 0;
+
         openHands.forEach((villainHand: Hand) => {
           const villainIndex = getHandIndex(
             equityMatrix,
@@ -222,6 +233,7 @@ export const RangeGrid: React.FC<RangeGridProps> = ({
             }
           }
         });
+
         vsRange = count > 0 ? total / count : null;
       }
     }
@@ -258,7 +270,9 @@ export const RangeGrid: React.FC<RangeGridProps> = ({
       // 編集したハンドを一瞬ハイライト
       setLastEditedHand(hand);
       window.setTimeout(() => {
-        setLastEditedHand((current) => (current === hand ? null : current));
+        setLastEditedHand((current) =>
+          current === hand ? null : current,
+        );
       }, 300);
 
       return;
@@ -329,7 +343,7 @@ export const RangeGrid: React.FC<RangeGridProps> = ({
           onRangeDataChange={handleRangeDataChange}
         />
       </div>
-      
+
       {positionStats && (
         <div className="range-grid__stats">
           <span className="range-grid__stats-pos">
@@ -383,6 +397,7 @@ export const RangeGrid: React.FC<RangeGridProps> = ({
             <div className="range-grid__header-cell">
               {rowRank}
             </div>
+
             {RANKS.map((colRank: Rank, colIndex: number) => {
               const hand = getHandAt(rowIndex, colIndex);
 
@@ -408,6 +423,19 @@ export const RangeGrid: React.FC<RangeGridProps> = ({
               }
 
               const isHovered = hand === hoveredHand;
+              const isEdited = lastEditedHand === hand;
+
+              // カテゴリ解決（あれば）
+              let category: RangeCategoryKey | null = null;
+              if (handCategoryIndex) {
+                const byPos = handCategoryIndex[selectedPosition];
+                if (byPos) {
+                  const cat = byPos[hand as unknown as string];
+                  if (cat) {
+                    category = cat as RangeCategoryKey;
+                  }
+                }
+              }
 
               return (
                 <RangeCell
@@ -416,7 +444,9 @@ export const RangeGrid: React.FC<RangeGridProps> = ({
                   action={action}
                   isHovered={isHovered}
                   isHero={isHero}
+                  isEdited={isEdited}
                   equityColor={equityColor}
+                  category={category}
                   onClick={() => handleCellClick(hand)}
                   onMouseEnter={() =>
                     handleCellMouseEnter(hand)
@@ -436,24 +466,49 @@ export const RangeGrid: React.FC<RangeGridProps> = ({
           equityVsRange={equityStats.vsRange}
         />
         <div className="range-grid__legend">
-          <div className="range-grid__legend-row">
-            <span className="legend-swatch legend-swatch--open" />
-            <span>OPEN</span>
+          {/* アクション凡例 */}
+          <div className="range-grid__legend-column">
+            <div className="range-grid__legend-title">アクション</div>
+            <div className="range-grid__legend-row">
+              <span className="legend-swatch legend-swatch--open" />
+              <span>OPEN</span>
+            </div>
+            <div className="range-grid__legend-row">
+              <span className="legend-swatch legend-swatch--call" />
+              <span>CALL</span>
+            </div>
+            <div className="range-grid__legend-row">
+              <span className="legend-swatch legend-swatch--jam" />
+              <span>JAM</span>
+            </div>
+            <div className="range-grid__legend-row">
+              <span className="legend-swatch legend-swatch--fold" />
+              <span>FOLD</span>
+            </div>
           </div>
-          <div className="range-grid__legend-row">
-            <span className="legend-swatch legend-swatch--call" />
-            <span>CALL</span>
-          </div>
-          <div className="range-grid__legend-row">
-            <span className="legend-swatch legend-swatch--jam" />
-            <span>JAM</span>
-          </div>
-          <div className="range-grid__legend-row">
-            <span className="legend-swatch legend-swatch--fold" />
-            <span>FOLD</span>
+
+          {/* カテゴリ凡例 */}
+          <div className="range-grid__legend-column">
+            <div className="range-grid__legend-title">ハンドカテゴリ</div>
+            <div className="range-grid__legend-row">
+              <span className="legend-swatch legend-swatch--cat-premium" />
+              <span>premium（EV +1.5〜+2.5BB）</span>
+            </div>
+            <div className="range-grid__legend-row">
+              <span className="legend-swatch legend-swatch--cat-strong" />
+              <span>strong（EV +0.8〜+1.5BB）</span>
+            </div>
+            <div className="range-grid__legend-row">
+              <span className="legend-swatch legend-swatch--cat-medium" />
+              <span>medium（EV +0.3〜+0.8BB）</span>
+            </div>
+            <div className="range-grid__legend-row">
+              <span className="legend-swatch legend-swatch--cat-speculative" />
+              <span>speculative（EV -0.1〜+0.3BB）</span>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+      </div>
   );
 };

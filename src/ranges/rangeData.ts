@@ -1,10 +1,14 @@
-import type {
+import {
+  RangeData,
+  PositionRange,
   Action,
   Hand,
   Position,
-  RangeData,
-  PositionRange,
-} from './types';
+  RangeCategoryKey,
+  PositionCategoryBuckets,
+  RangeDataWithCategories,
+  HandCategoryIndex,
+} from "./types";
 
 interface ImportMetaEnvLike {
   env?: {
@@ -196,4 +200,177 @@ export function deriveActionForHand(
   if (isHandInRange(hand, position, 'call', data)) return 'call';
   if (isHandInRange(hand, position, 'open', data)) return 'open';
   return 'fold';
+}
+
+/**
+ * ranges_6max.json の positions.* から PositionCategoryBuckets[] を構築する
+ *
+ * rawJson は fetch 直後の JSON そのままを想定:
+ *
+ * {
+ *   ...,
+ *   positions: {
+ *     "UTG": {
+ *       "premium": ["AA", "KK", ...],
+ *       "strong": [...],
+ *       ...
+ *     },
+ *     "CO": { ... },
+ *     ...
+ *   }
+ * }
+ */
+
+export function buildCategoryBuckets(rawJson: unknown): PositionCategoryBuckets[] {
+  if (!rawJson || typeof rawJson !== "object") {
+    return [];
+  }
+
+  type RawPositions = Record<
+    string,
+    Partial<Record<RangeCategoryKey, string[]>>
+  >;
+
+  const raw = rawJson as { positions?: RawPositions };
+  if (!raw.positions) {
+    return [];
+  }
+
+  const result: PositionCategoryBuckets[] = [];
+
+  for (const [positionKey, posData] of Object.entries(raw.positions)) {
+    if (!posData) continue;
+
+    const position = positionKey as Position;
+
+    const buckets: Record<RangeCategoryKey, Hand[]> = {
+      premium: [],
+      strong: [],
+      medium: [],
+      speculative: [],
+    };
+
+    const allCategories: RangeCategoryKey[] = [
+      "premium",
+      "strong",
+      "medium",
+      "speculative",
+    ];
+
+    for (const cat of allCategories) {
+      const codes = posData[cat] ?? [];
+
+      const hands: Hand[] = codes.map((code) => {
+        // Hand の実際の構造は既存定義に依存するので最低限 code を持たせてキャスト
+        return { code } as unknown as Hand;
+      });
+
+      buckets[cat] = hands;
+    }
+
+    result.push({
+      position,
+      buckets,
+    });
+  }
+
+  return result;
+}
+
+/**
+ * RangeData とカテゴリバケット情報をまとめてロードするヘルパー。
+ *
+ * - core: 既存の loadRangeData() が返す RangeData
+ * - positionBuckets: core を rawJson と見なして buildCategoryBuckets で構築
+ *
+ * もし RangeData に positions.* が含まれていなければ positionBuckets は空配列になるが、
+ * それはそれで安全（カテゴリ情報なしとして扱える）。
+ */
+export async function loadRangeDataWithCategories(): Promise<RangeDataWithCategories> {
+  // ① いつもの RangeData をロード
+  const core = await loadRangeData();
+
+  // ② そのまま positions.* を含んでいる想定でバケット化
+  const positionBuckets = buildCategoryBuckets(core as unknown);
+
+  return {
+    core,
+    positionBuckets,
+  };
+}
+
+/**
+ * PositionCategoryBuckets[] から HandCategoryIndex を構築する。
+ *
+ * - 同じ handCode が複数カテゴリに現れた場合は、後勝ち（最後に見つけたカテゴリで上書き）とする。
+ *   ※ そんなケースは基本ない想定なのでシンプルにしている。
+ */
+export function buildHandCategoryIndex(
+  buckets: PositionCategoryBuckets[],
+): HandCategoryIndex {
+  // 全 Position 分を初期化
+  const index: HandCategoryIndex = {
+    UTG: {},
+    MP: {},
+    CO: {},
+    BTN: {},
+    SB: {},
+    BB: {},
+  };
+
+  for (const bucket of buckets) {
+    const pos = bucket.position;
+    const target = index[pos] ?? (index[pos] = {});
+
+    const allCategories: RangeCategoryKey[] = [
+      "premium",
+      "strong",
+      "medium",
+      "speculative",
+    ];
+
+    for (const cat of allCategories) {
+      const hands = bucket.buckets[cat] ?? [];
+      for (const hand of hands) {
+        let code = "";
+
+        if (typeof hand === "string") {
+          // ★ ranges_6max.json の positions.* は "AKs" などの string
+          code = hand;
+        } else {
+          // 将来 Hand オブジェクトに変わった場合もケア
+          code =
+            (hand as any).code ??
+            (hand as any).id ??
+            (typeof (hand as any).label === "string"
+              ? (hand as any).label
+              : "");
+        }
+
+        if (!code) continue;
+
+        target[code] = cat;
+      }
+    }
+  }
+
+  return index;
+}
+
+/**
+ * handCategoryIndex から position + handCode でカテゴリを引くヘルパー。
+ *
+ * - index が無い / position が無い / hand が登録されていない場合は null を返す。
+ */
+export function getHandCategoryFor(
+  index: HandCategoryIndex | null | undefined,
+  position: Position,
+  handCode: string,
+): RangeCategoryKey | null {
+  if (!index) return null;
+  const byPos = index[position];
+  if (!byPos) return null;
+
+  const cat = byPos[handCode];
+  return (cat ?? null) as RangeCategoryKey | null;
 }

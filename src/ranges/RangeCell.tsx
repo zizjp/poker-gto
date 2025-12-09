@@ -1,16 +1,22 @@
 import React from 'react';
-import type { Action, Hand } from './types';
+import type { Action, Hand, RangeCategoryKey } from './types';
 
 interface RangeCellProps {
   hand: Hand;
   action: Action;
   isHovered: boolean;
   isHero: boolean;
-  isEdited?: boolean;        // ★ オプションにする
+  isEdited?: boolean; // ★ オプションにする
   equityColor?: string;
   onClick: () => void;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
+
+  /**
+   * 将来の色分け用: このセルが属するレンジカテゴリ
+   * 例: "premium" | "strong" | "medium" | "speculative"
+   */
+  category?: RangeCategoryKey | null;
 }
 
 export const RangeCell: React.FC<RangeCellProps> = ({
@@ -18,27 +24,33 @@ export const RangeCell: React.FC<RangeCellProps> = ({
   action,
   isHovered,
   isHero,
-  isEdited = false,   // ★ 渡されなければ false 扱い
+  isEdited = false, // ★ 渡されなければ false 扱い
   equityColor,
   onClick,
   onMouseEnter,
   onMouseLeave,
+  category = null,
 }) => {
   const actionClass =
     action === 'open'
       ? 'range-cell--open'
       : action === 'call'
-        ? 'range-cell--call'
-        : action === 'jam'
-          ? 'range-cell--jam'
-          : 'range-cell--fold';
+      ? 'range-cell--call'
+      : action === 'jam'
+      ? 'range-cell--jam'
+      : 'range-cell--fold';
+
+  const categoryClass = category
+    ? `range-cell--cat-${category}`
+    : '';
 
   const classes = [
     'range-cell',
     actionClass,
+    categoryClass, // ★ カテゴリごとのクラス（まだCSS未定義でもOK）
     isHovered ? 'range-cell--hovered' : '',
     isHero ? 'range-cell--hero' : '',
-    isEdited ? 'range-cell--edited' : '',   // ★ 追加
+    isEdited ? 'range-cell--edited' : '', // ★ 追加
   ]
     .filter(Boolean)
     .join(' ');
@@ -49,7 +61,6 @@ export const RangeCell: React.FC<RangeCellProps> = ({
   }
 
   const ariaLabel = `${hand} ${action}`;
-
   const handleKeyDown: React.KeyboardEventHandler<HTMLDivElement> = (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();

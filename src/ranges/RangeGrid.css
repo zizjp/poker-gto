@@ -376,3 +376,122 @@
 .editor-back-btn:hover {
   background: #111827;
 }
+
+/* ========================================
+   Range category visualization
+   - premium / strong / medium / speculative
+   - 既存の equityColor 背景を壊さないように、
+     セル下端に小さなカラー帯を重ねる。
+   ======================================== */
+
+.range-cell {
+  position: relative; /* カテゴリ帯用のベース */
+}
+
+/* 共通: 下端 3px のインジケータバー */
+.range-cell::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  bottom: 2px;
+  height: 3px;
+  border-radius: 999px;
+  opacity: 0; /* デフォルトは非表示 */
+  pointer-events: none;
+  transition: opacity 0.12s ease-out;
+}
+
+/* premium: EV +1.5~+2.5BB (Dark Red) */
+.range-cell--cat-premium::after {
+  background: linear-gradient(90deg, #7f0000, #ff1744);
+  opacity: 0.9;
+}
+
+/* strong: EV +0.8~+1.5BB (Bright Red) */
+.range-cell--cat-strong::after {
+  background: linear-gradient(90deg, #c62828, #ff5252);
+  opacity: 0.85;
+}
+
+/* medium: EV +0.3~+0.8BB (Orange) */
+.range-cell--cat-medium::after {
+  background: linear-gradient(90deg, #ef6c00, #ffb300);
+  opacity: 0.8;
+}
+
+/* speculative: EV -0.1~+0.3BB (Yellow) */
+.range-cell--cat-speculative::after {
+  background: linear-gradient(90deg, #fbc02d, #fff176);
+  opacity: 0.8;
+}
+
+/* hover / hero のときは少しだけ強調してもいい */
+.range-cell--hero.range-cell--cat-premium::after,
+.range-cell--hero.range-cell--cat-strong::after,
+.range-cell--hero.range-cell--cat-medium::after,
+.range-cell--hero.range-cell--cat-speculative::after {
+  height: 4px;
+  bottom: 1px;
+}
+
+/* ========================================
+   Legend layout 拡張（アクション + カテゴリ）
+   ======================================== */
+
+.range-grid__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: flex-start;
+  font-size: 11px;
+  color: #e5e7eb;
+}
+
+.range-grid__legend-column {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.range-grid__legend-title {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+.range-grid__legend-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 既存のアクション系スウォッチに影響しないよう追加 */
+
+.legend-swatch--cat-premium {
+  width: 14px;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #7f0000, #ff1744);
+}
+
+.legend-swatch--cat-strong {
+  width: 14px;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #c62828, #ff5252);
+}
+
+.legend-swatch--cat-medium {
+  width: 14px;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ef6c00, #ffb300);
+}
+
+.legend-swatch--cat-speculative {
+  width: 14px;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #fbc02d, #fff176);
+}

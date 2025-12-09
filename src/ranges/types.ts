@@ -60,3 +60,61 @@ export interface RangeFocusContext {
   position: Position;
   hand: Hand;
 }
+
+// ========================================
+// レンジ強度カテゴリまわりの型
+// ========================================
+
+/**
+ * ranges_6max.json の metadata.categories / positions.* のキーに対応
+ */
+export type RangeCategoryKey =
+  | "premium"
+  | "strong"
+  | "medium"
+  | "speculative";
+
+/**
+ * カテゴリごとの説明（例: "EV +1.5~+2.5BB (Dark Red)" など）
+ */
+export interface RangeCategoryMeta {
+  key: RangeCategoryKey;
+  description: string;
+}
+
+/**
+ * 1ポジション分のカテゴリバケット
+ * - buckets[category] に、そのカテゴリに属する Hand[] が入る
+ */
+export interface PositionCategoryBuckets {
+  position: Position;
+  buckets: Record<RangeCategoryKey, Hand[]>;
+}
+
+// ========================================
+// RangeData + カテゴリ情報のラッパー
+// ========================================
+
+/**
+ * レンジ本体（RangeData）に、ポジション別カテゴリバケットを付与した構造。
+ * - core: 既存の RangeData そのまま
+ * - positionBuckets: buildCategoryBuckets() で構築したカテゴリ情報
+ */
+export interface RangeDataWithCategories {
+  core: RangeData;
+  positionBuckets: PositionCategoryBuckets[];
+}
+
+// ========================================
+// ハンド → カテゴリLookup用インデックス
+// ========================================
+
+/**
+ * position + handCode("AKs"など) から RangeCategoryKey を即引きするためのインデックス。
+ *
+ * handCategoryIndex[Position]["AKs"] => "premium" | "strong" | ... | undefined
+ */
+export type HandCategoryIndex = Record<
+  Position,
+  Record<string, RangeCategoryKey | undefined>
+>;
