@@ -184,6 +184,17 @@ export class Trainer {
     // 念のため、実際に回答した数で上書き
     session.questionCount = session.results.length;
     this.questionQueues.delete(session.id);
+
+    // ▼ ここでセッション一覧に追加して保存
+    try {
+      const sessions = loadSessions();
+      sessions.push(session);
+      saveSessions(sessions);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error("[Trainer] failed to persist session", e);
+    }
+
     return session;
   }
 
