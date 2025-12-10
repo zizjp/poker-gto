@@ -1,42 +1,80 @@
-// ---- 基本ドメイン型 ----
+// src/core/types.ts
+// ------------------------------------------------------
+// アプリ全体で使う「唯一の真実」な型定義
+// - RangeSet / RangeScenario
+// - AppSettings / TrainingQuestion / TrainingSession など
+// ------------------------------------------------------
 
-export type Rank =
-  | "A" | "K" | "Q" | "J" | "T"
-  | "9" | "8" | "7" | "6" | "5" | "4" | "3" | "2";
+import type {
+  Position as RangesPosition,
+  Rank as RangesRank,
+  Hand as RangesHand,
+  HandCode as RangesHandCode,
+  RangeCategoryKey as RangesCategoryKey,
+} from "../ranges/types";
 
-export type HandCode = string;
+// === カード / ポジション関連 ===
 
-export type Position =
-  | "UTG" | "UTG+1" | "MP" | "HJ" | "CO" | "BTN" | "SB" | "BB";
+export type Position = RangesPosition;
+export type Rank = RangesRank;
+export type Hand = RangesHand;
+export type HandCode = RangesHandCode;
+export type RangeCategoryKey = RangesCategoryKey;
 
-export type ScenarioType = "OPEN" | "THREE_BET" | "FOUR_BET"; // 表示: オープン / 3Bet / 4Bet
-export type ActionKind = "RAISE" | "CALL" | "FOLD";
+// ゲームタイプ（文字列でもOKにしておく）
+export type GameType = "6max" | "9max" | "8max_BB_ante" | string;
+
+// === レンジ関連 ===
 
 export interface HandDecision {
-  raise: number; // 0〜100, 整数
-  call: number;  // 0〜100
-  fold: number;  // 0〜100, raise+call+fold === 100
+  raise: number; // %
+  call: number;  // %
+  fold: number;  // %
 }
+
+export type ScenarioType =
+  | "open"
+  | "vs3bet"
+  | "4bet"
+  | "vs4bet"
+  | "defend"
+  | "3bet"
+  | "other"
+  | string;
 
 export interface RangeScenario {
   id: string;
   name: string;
-  heroPosition: Position;
-  villainPosition?: Position;
-  stackSizeBB: number; // 20, 30, 40 など
-  scenarioType: ScenarioType;
+
+  // 旧コードでは heroPosition を主に使っているので、両方 optional にしておく
+  position?: Position;
+  heroPosition?: Position;
+  villainPosition?: Position | null;
+  scenarioType?: ScenarioType;
+  stackSizeBB?: number;
+
+  // ハンドごとの決定テーブル
   hands: Record<HandCode, HandDecision>;
-  enabledHandCodes: HandCode[]; // 出題対象
+
+  // ハンドグリッド出題範囲（有効ハンド）
+  enabledHandCodes: HandCode[];
+
+  // EV プリセット用のマップ（任意）
+  handEvs?: Record<HandCode, number>;
+
+  // 将来拡張用に余白を許容
+  [key: string]: any;
 }
 
 export interface RangeSetMeta {
   id: string;
   name: string;
   description?: string;
-  createdAt: string;  // ISO8601
-  updatedAt: string;  // ISO8601
-  gameType: string;   // "8max_BB_ante" 等
-  version: number;    // スキーマバージョン
+  tags?: string[];
+  version?: number | string;
+  gameType?: GameType | string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface RangeSet {
@@ -44,91 +82,83 @@ export interface RangeSet {
   scenarios: RangeScenario[];
 }
 
-// ---- 設定・スコープ ----
+// === 設定関連 ===
 
-export type JudgeMode = "FREQUENCY" | "PROBABILISTIC";
-
-export interface TrainingScopePreset {
-  id: string;               // "p25", "p45", "p50", "all" 等
-  name: string;             // "Top 25%" 等
-  enabledHands: HandCode[];
-}
+export type JudgeMode = "strict" | "lenient" | "gto" | string;
 
 export interface AppSettings {
-  judgeMode: JudgeMode;
   activeRangeSetId: string | null;
   activeScenarioId: string | null;
-  usePresetScopeId: string | null;
-  customScopeHands: HandCode[];
-  hapticFeedback: boolean;
+  judgeMode: JudgeMode;
+  // 他の設定も雑に許容
+  [key: string]: any;
 }
 
-// ---- トレーニング & 統計 ----
+// === トレーナー / セッション関連 ===
 
+// Trainer / UI 側は "FOLD" / "CALL" / "RAISE" の大文字で扱っている
+export type ActionKind = "FOLD" | "CALL" | "RAISE";
+
+// UserAnswer は ActionKind と同じものとして扱う
 export type UserAnswer = ActionKind;
 
 export interface TrainingQuestion {
   id: string;
   hand: HandCode;
   correctAction: ActionKind;
-  correctProbabilities: HandDecision;
+  // trainer.ts 側では scenarioId を持っていないので optional にしておく
+  scenarioId?: string;
+  [key: string]: any;
 }
+
+// 互換用エイリアス（古いコードが TrainerQuestion を使っている）
+export type TrainerQuestion = TrainingQuestion;
 
 export interface QuestionResult {
   questionId: string;
-  hand: HandCode;
+  correctAction: ActionKind;
   userAnswer: UserAnswer;
   isCorrect: boolean;
-  correctAction: ActionKind;
-  scenarioId: string;
-  rangeSetId: string;
-  timestamp: string;
+  hand?: HandCode;
+  scenarioId?: string;
+  rangeSetId?: string;
+  timestamp?: string;
+  [key: string]: any;
 }
 
 export interface TrainingSession {
   id: string;
-  startedAt: string;
-  finishedAt?: string;
   rangeSetId: string;
   scenarioId: string;
+  // trainer.ts 側で mode を入れていないケースがあるので optional
+  mode?: "normal" | "review" | string;
+  startedAt: string;
+  finishedAt?: string;
+  // 実際に解いた問題数
   questionCount: number;
+  // 各問題の結果
   results: QuestionResult[];
+  [key: string]: any;
+}
+
+// === Stats 関連（詳細構造は緩く持つ） ===
+
+export interface StatsSnapshot {
+  [key: string]: any;
 }
 
 export interface GlobalStats {
-  totalSessions: number;
-  totalQuestions: number;
-  totalCorrect: number;
-  accuracy: number; // 0〜1
+  [key: string]: any;
 }
 
 export interface RangeStats {
-  scenarioId: string;
-  scenarioName: string;
-  totalQuestions: number;
-  totalCorrect: number;
-  accuracy: number;
+  [key: string]: any;
 }
 
 export interface HandStats {
-  hand: HandCode;
-  totalQuestions: number;
-  totalCorrect: number;
-  accuracy: number;
+  [key: string]: any;
 }
 
 export interface RecentSessionSummary {
-  id: string;
-  startedAt: string;
-  finishedAt?: string;
-  scenarioName: string;
-  accuracy: number;
-  questionCount: number;
-}
-
-export interface StatsSnapshot {
-  global: GlobalStats;
-  byScenario: RangeStats[];
-  byHand: HandStats[];
-  recentSessions: RecentSessionSummary[];
+  [key: string]: any;
 }

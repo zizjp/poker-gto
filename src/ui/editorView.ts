@@ -1,7 +1,8 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { EditorRoot } from '../ranges/EditorRoot';
-
+import { loadRankedHands } from "../ranges/rangeData";
+import { generateHandGridOrder } from "../core/handOrder";
 import { loadSettings, saveSettings } from "../core/settings";
 import {
   loadRangeSets,
@@ -9,7 +10,6 @@ import {
   findRangeSetById,
   findScenarioById
 } from "../core/ranges";
-import { generateHandGridOrder } from "../core/handOrder";
 import type {
   RangeSet,
   RangeScenario,
@@ -18,6 +18,22 @@ import type {
   HandCode,
   HandDecision
 } from "../core/types";
+
+// Vite の BASE_URL を考慮して ranges_6max.json にアクセスするためのヘルパー
+interface ImportMetaEnvLike {
+  env?: {
+    BASE_URL?: string;
+  };
+}
+
+const EDITOR_BASE_URL =
+  ((import.meta as unknown as ImportMetaEnvLike).env?.BASE_URL) ?? "/";
+const EDITOR_RANGE_DATA_URL = `${EDITOR_BASE_URL}data/ranges_6max.json`;
+
+type RankedJsonHand = {
+  hand: string;
+  rank?: number;
+};
 
 export function initEditorReact() {
   const rootEl = document.getElementById('editor-react-root');
@@ -68,10 +84,10 @@ export function renderEditorView(): string {
     })
     .join("");
 
-  const activeScenario: RangeScenario | null = findScenarioById(
-    activeRangeSet,
-    settings.activeScenarioId
-  );
+const activeScenario: RangeScenario | null =
+  activeRangeSet
+    ? findScenarioById([activeRangeSet], settings.activeScenarioId)
+    : null;
 
   const scenarioOptions = activeRangeSet.scenarios
     .map((sc) => {
@@ -266,15 +282,22 @@ function escapeHtml(str: string): string {
 function renderScenarioDetail(s: RangeScenario): string {
   const handCount = Object.keys(s.hands).length;
 
+  // ★ フォールバックを定義
+  const heroPos = (s as any).heroPosition ?? s.position ?? "（未設定）";
+  const villainPos = (s as any).villainPosition ?? "（なし）";
+  const scenarioType: ScenarioType =
+    (s.scenarioType as ScenarioType) ?? "OPEN";
+  const stackSize = s.stackSizeBB ?? 100;
+
   return `
     <div class="section">
       <h3>シナリオ詳細</h3>
       <p style="font-size:13px;">
         名前: <strong>${s.name}</strong><br>
-        自分のポジション: <strong>${s.heroPosition}</strong><br>
-        相手のポジション: <strong>${s.villainPosition ?? "（なし）"}</strong><br>
-        タイプ: <strong>${scenarioTypeLabel(s.scenarioType)}</strong><br>
-        スタック: <strong>${s.stackSizeBB} BB</strong><br>
+        自分のポジション: <strong>${heroPos}</strong><br>
+        相手のポジション: <strong>${villainPos}</strong><br>
+        タイプ: <strong>${scenarioTypeLabel(scenarioType)}</strong><br>
+        スタック: <strong>${stackSize} BB</strong><br>
         登録ハンド数: <strong>${handCount}</strong>
       </p>
     </div>
@@ -288,36 +311,24 @@ function scenarioTypeLabel(t: ScenarioType): string {
 
 function renderHandEditor(s: RangeScenario): string {
   const hands = s.hands;
-  const codes = Object.keys(hands) as HandCode[];
 
-  if (codes.length === 0) {
-    return `
-      <div class="section">
-        <h3 class="hand-editor-section-title">ハンド編集</h3>
-        <p style="font-size:13px;color:#6b7280;">
-          このシナリオにはまだハンドが登録されていません。<br>
-          （インポート機能やプリセット適用は次フェーズで実装予定）
-        </p>
-      </div>
-    `;
-  }
-
+  // 🔹 13×13グリッド順（AA, KK, ..., 22 / suited / offsuit）の全ハンド
   const order = generateHandGridOrder();
-  const orderedCodes = order.filter((code) => codes.includes(code));
 
-  const rowsHtml = orderedCodes
-    .map((code, index) => {
-      const d: HandDecision = hands[code];
-      const r = d.raise ?? 0;
-      const c = d.call ?? 0;
-      const f = d.fold ?? 100 - r - c;
+  const rowsHtml = order
+    .map((code: HandCode, index: number) => {
+      // シナリオに既にあるハンドはそれを使う、なければデフォルト 0/0/100
+      const d: HandDecision | undefined = hands[code];
+      const raise = d?.raise ?? 0;
+      const call = d?.call ?? 0;
+      const fold = d?.fold ?? Math.max(0, 100 - raise - call);
 
       return `
       <div class="hand-row" data-hand="${code}" data-index="${index}">
         <button class="hand-row-header" type="button">
           <div class="hand-row-header-left">
             <span class="hand-row-code">${code}</span>
-            <span class="hand-row-summary">R ${r}% / C ${c}% / F ${f}%</span>
+            <span class="hand-row-summary">R ${raise}% / C ${call}% / F ${fold}%</span>
           </div>
           <span class="hand-row-toggle">▼</span>
         </button>
@@ -331,7 +342,7 @@ function renderHandEditor(s: RangeScenario): string {
               min="0"
               max="100"
               class="input hand-raise-input"
-              value="${r}"
+              value="${raise}"
             />
           </div>
           <div class="settings-row">
@@ -343,13 +354,13 @@ function renderHandEditor(s: RangeScenario): string {
               min="0"
               max="100"
               class="input hand-call-input"
-              value="${c}"
+              value="${call}"
             />
           </div>
           <div class="settings-row">
             <div class="label">FOLD (%)</div>
             <div class="input" style="background:#f3f4f6;border-style:dashed;">
-              <span class="hand-fold-display">${f}</span>%
+              <span class="hand-fold-display">${fold}</span>%
             </div>
           </div>
           <div class="hand-error" style="display:none;"></div>
@@ -358,21 +369,21 @@ function renderHandEditor(s: RangeScenario): string {
           </div>
         </div>
       </div>
-    `;
+      `;
     })
     .join("");
 
   return `
-    <div class="section">
-      <h3 class="hand-editor-section-title">ハンド編集</h3>
-      <p style="font-size:11px;color:#6b7280;margin-top:0;">
-        RAISE / CALL を入力すると FOLD は自動計算されます。<br>
-        RAISE + CALL が 100 を超えるとエラーになります。
-      </p>
-      <div class="hand-accordion-list">
-        ${rowsHtml}
-      </div>
+  <div class="section">
+    <h3 class="hand-editor-section-title">ハンド編集</h3>
+    <p style="font-size:11px;color:#6b7280;margin-top:0;">
+      RAISE / CALL を入力すると FOLD は自動計算されます。<br>
+      RAISE + CALL が 100 を超えるとエラーになります。
+    </p>
+    <div class="hand-accordion-list">
+      ${rowsHtml}
     </div>
+  </div>
   `;
 }
 
@@ -415,7 +426,7 @@ function renderHandGridSection(scenario: RangeScenario): string {
           <button id="handGridPreset25" class="button button-secondary" type="button">Top 25%</button>
           <button id="handGridPreset45" class="button button-secondary" type="button">Top 45%</button>
           <button id="handGridPreset50" class="button button-secondary" type="button">Top 50%</button>
-          <button id="handGridPreset100" class="button button-secondary" type="button">100%</button>
+          <button id="handGridPreset75" class="button button-secondary" type="button">Top 75%</button>
         </div>
         <div class="row" style="gap:4px;">
           <button id="handGridAllOnBtn" class="button button-secondary" type="button">全てON</button>
@@ -688,7 +699,7 @@ export function initEditorViewEvents() {
         return;
       }
 
-      const scenario = findScenarioById(target, scenarioId);
+      const scenario = findScenarioById([target], scenarioId);
       if (!scenario) {
         alert("シナリオが見つかりません。");
         return;
@@ -770,8 +781,9 @@ export function initEditorViewEvents() {
 
       if (rangeSet.scenarios.length === 0) return;
 
-      const currentScenario =
-        findScenarioById(rangeSet, settings.activeScenarioId) ?? rangeSet.scenarios[0];
+    const currentScenario =
+      findScenarioById([rangeSet], settings.activeScenarioId) ??
+      rangeSet.scenarios[0];
       if (!currentScenario) return;
 
       const ok = confirm(`シナリオ「${currentScenario.name}」を削除しますか？\n元に戻せません。`);
@@ -792,8 +804,15 @@ export function initEditorViewEvents() {
   // ハンドエディターのイベント
   const settingsForDetail = loadSettings();
   const rangeSetsForDetail = loadRangeSets();
-  const rangeSetForDetail = findRangeSetById(rangeSetsForDetail, settingsForDetail.activeRangeSetId);
-  const scenarioForDetail = findScenarioById(rangeSetForDetail, settingsForDetail.activeScenarioId);
+  const rangeSetForDetail = findRangeSetById(
+    rangeSetsForDetail,
+    settingsForDetail.activeRangeSetId
+  );
+
+  const scenarioForDetail =
+    rangeSetForDetail
+      ? findScenarioById([rangeSetForDetail], settingsForDetail.activeScenarioId)
+      : null;
 
   if (rangeSetForDetail && scenarioForDetail) {
     initHandEditorEvents(rangeSetsForDetail, rangeSetForDetail, scenarioForDetail);
@@ -977,27 +996,76 @@ function initGlobalHandGridEvents() {
       return;
     }
 
-    const preset100Btn = target.closest<HTMLButtonElement>("#handGridPreset100");
-    if (preset100Btn) {
-      applyHandGridPreset(1.0);
+    const preset75Btn = target.closest<HTMLButtonElement>("#handGridPreset75");
+    if (preset75Btn) {
+      applyHandGridPreset(0.75);
       return;
     }
   });
 }
 
-function applyHandGridPreset(ratio: number) {
+/**
+ * プリセットボタン用：
+ * ratio に応じて JSON の rank でしきい値を決めて、
+ * rank <= しきい値 のハンドをすべて有効にする。
+ *
+ * 例:
+ *  - ratio = 0.25 → rank <= 25
+ *  - ratio = 0.50 → rank <= 50
+ */
+async function applyHandGridPreset(ratio: number) {
   const { rangeSets, rangeSet, scenario } = getActiveRangeSetAndScenario();
   if (!rangeSets || !rangeSet || !scenario) return;
 
-  const order = generateHandGridOrder();
-  const total = order.length || 1;
-  const count = Math.max(1, Math.round(total * ratio));
+  try {
+    const res = await fetch(EDITOR_RANGE_DATA_URL);
+    if (!res.ok) {
+      console.error(
+        "Failed to load ranges_6max.json for preset",
+        res.status,
+        res.statusText,
+      );
+      return;
+    }
 
-  const selected = order.slice(0, count) as HandCode[];
-  const enabled = new Set<HandCode>(selected);
+    const json = (await res.json()) as { hands?: RankedJsonHand[] };
+    const hands = Array.isArray(json.hands) ? json.hands : [];
 
-  syncCellsFromSet(enabled);
-  persistEnabled(rangeSets, rangeSet, scenario, enabled);
+    // rank が付いているハンドだけ対象にする
+    const rankedHands = hands.filter(
+      (h) => typeof h.rank === "number" && typeof h.hand === "string",
+    );
+
+    if (rankedHands.length === 0) {
+      console.warn("No ranked hands found in ranges_6max.json");
+      return;
+    }
+
+    // 169ハンドを前提に、rank 上位 ratio 分を選択する。
+    //  0.25 → 上位 42 ハンド前後
+    //  0.50 → 上位 84 ハンド前後
+    //  0.75 → 上位 127 ハンド前後
+    const TOTAL_HANDS = 169;
+
+    // ratio からしきい値 rank を計算
+    const threshold = Math.max(1, Math.round(TOTAL_HANDS * ratio));
+
+    const enabled = new Set<HandCode>();
+
+    for (const h of rankedHands) {
+      const r = h.rank;
+      if (typeof r === "number" && r <= threshold) {
+        enabled.add(h.hand.trim() as HandCode);
+      }
+    }
+
+    // グリッドUIに反映 & RangeSet に保存
+    syncCellsFromSet(enabled);
+    persistEnabled(rangeSets, rangeSet, scenario, enabled);
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error("Failed to apply JSON-ranked preset", e);
+  }
 }
 
 function getActiveRangeSetAndScenario(): {
@@ -1008,7 +1076,10 @@ function getActiveRangeSetAndScenario(): {
   const settings = loadSettings();
   const rangeSets = loadRangeSets();
   const rangeSet = findRangeSetById(rangeSets, settings.activeRangeSetId);
-  const scenario = findScenarioById(rangeSet, settings.activeScenarioId);
+  const scenario =
+    rangeSet
+      ? findScenarioById([rangeSet], settings.activeScenarioId)
+      : null;
   if (!rangeSet || !scenario) {
     return { rangeSets: null, rangeSet: null, scenario: null };
   }
@@ -1061,9 +1132,11 @@ function getAllHandCodes(): HandCode[] {
 }
 
 function orderHandCodes(codes: HandCode[]): HandCode[] {
-  const order = generateHandGridOrder();
-  const indexMap = new Map<HandCode, number>();
-  order.forEach((c, idx) => indexMap.set(c, idx));
+const order = generateHandGridOrder();
+const indexMap = new Map<HandCode, number>();
+order.forEach((c: HandCode, idx: number) => {
+  indexMap.set(c, idx);
+});
   return [...codes].sort((a, b) => {
     const ia = indexMap.get(a) ?? 9999;
     const ib = indexMap.get(b) ?? 9999;

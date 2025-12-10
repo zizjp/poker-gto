@@ -35,7 +35,7 @@ export function renderStatsView(): string {
   // シナリオID → 名前
   const scenarioNameMap = buildScenarioNameMap(rangeSets);
   // シナリオ別統計に名前を埋める
-  stats.byScenario.forEach((s) => {
+  stats.byScenario.forEach((s: any) => {
     s.scenarioName = scenarioNameMap.get(s.scenarioId) ?? s.scenarioId;
   });
 
@@ -51,8 +51,8 @@ export function renderStatsView(): string {
 
   // シナリオ別テーブル
   const scenarioRows = stats.byScenario
-    .sort((a, b) => b.totalQuestions - a.totalQuestions)
-    .map((s) => {
+    .sort((a: any, b: any) => b.totalQuestions - a.totalQuestions)
+    .map((s: any) => {
       const acc = s.totalQuestions > 0 ? Math.round((s.accuracy || 0) * 100) : 0;
       return `
       <tr>

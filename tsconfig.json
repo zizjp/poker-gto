@@ -8,7 +8,7 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "jsx": "react-jsx",
-    "noEmit": true  // ★ これを追加
+    "noEmit": true
   },
   "include": ["src"]
 }

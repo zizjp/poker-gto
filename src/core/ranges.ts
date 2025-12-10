@@ -1,263 +1,359 @@
 // src/core/ranges.ts
+// ------------------------------------------------------
+// RangeSet の読み書き・検索まわり
+// - localStorage: pftrainer_ranges_v2
+// - RangeSet が1つも無い場合は、空のデフォルトを作る（既存挙動）
+// - ★ 追加: ranges_6max.json から GTO入り RangeSet を生成するヘルパー
+// ------------------------------------------------------
 
-import type { Position } from "../ranges/types";
-import type { RangeSet, RangeScenario } from "./types";
+import type {
+  RangeSet,
+  RangeScenario,
+  Position,
+  HandCode,
+  HandDecision,
+} from "./types";
 
-/**
- * localStorage のキー
- */
-const STORAGE_KEY = "poker-gto:rangeSets";
+const STORAGE_KEY = "pftrainer_ranges_v2";
 
-/**
- * 6-max オープンレンジのざっくりデフォルト
- * - 形式は RangeGrid と同じ "AKs" / "AQo" / "TT" などを想定
- */
-const UTG_OPEN: string[] = [
-  "AA",
-  "KK",
-  "QQ",
-  "JJ",
-  "TT",
-  "AKs",
-  "AQs",
-  "AJs",
-  "KQs",
-  "AKo",
-  "AQo",
-];
-
-const CO_OPEN: string[] = [
-  "AA",
-  "KK",
-  "QQ",
-  "JJ",
-  "TT",
-  "99",
-  "88",
-  "AKs",
-  "AQs",
-  "AJs",
-  "ATs",
-  "KQs",
-  "KJs",
-  "QJs",
-  "JTs",
-  "T9s",
-  "AKo",
-  "AQo",
-  "AJo",
-];
-
-const BTN_OPEN: string[] = [
-  "AA",
-  "KK",
-  "QQ",
-  "JJ",
-  "TT",
-  "99",
-  "88",
-  "77",
-  "66",
-  "AKs",
-  "AQs",
-  "AJs",
-  "ATs",
-  "A9s",
-  "A8s",
-  "KQs",
-  "KJs",
-  "KTs",
-  "QJs",
-  "QTs",
-  "JTs",
-  "T9s",
-  "98s",
-  "87s",
-  "AKo",
-  "AQo",
-  "AJo",
-  "ATo",
-];
-
-/**
- * オープンレンジを「100%レイズ」の RangeScenario に変換
- * - hands のキーは "AKs" などの 169-hand 文字列
- */
-function buildOpenRaiseScenario(params: {
-  id: string;
-  name: string;
-  description?: string;
-  heroPosition: Position;
-  stackSizeBB: number;
-  openHands: string[];
-}): RangeScenario {
-  const hands: RangeScenario["hands"] = {};
-
-  for (const hand of params.openHands) {
-    // HandDecision の実際の型は core/types.ts 依存なので any で握る
-    // raise100% / fold,call0% にしておくと大体妥当
-    (hands as any)[hand] = {
-      fold: 0,
-      call: 0,
-      raise: 1,
-    };
-  }
-
-  const enabledHandCodes = Object.keys(hands);
-
-  const scenario: RangeScenario = {
-    id: params.id,
-    name: params.name,
-    heroPosition: params.heroPosition,
-    stackSizeBB: params.stackSizeBB,
-    scenarioType: "open" as any,
-    hands,
-    enabledHandCodes,
-  };
-
-  return scenario;
-}
-
-/**
- * デフォルト 6-max オープンレンジセットを作成する
- *
- * - meta.id = "default_6max_open"
- * - meta.gameType = "6max"
- * - meta.version = 1
- * - UTG / CO / BTN の 3シナリオ（いずれも 40BB オープン）を含む
- */
-export function createDefaultRangeSet(
-  now: () => Date = () => new Date(),
-): RangeSet {
-  const timestamp = now().toISOString();
-
-  const scenarios: RangeScenario[] = [
-    buildOpenRaiseScenario({
-      id: "utg_open_40bb",
-      name: "UTG オープン 40BB",
-      description: "6-max UTG のオープンレンジ（ざっくり）",
-      heroPosition: "UTG",
-      stackSizeBB: 40,
-      openHands: UTG_OPEN,
-    }),
-    buildOpenRaiseScenario({
-      id: "co_open_40bb",
-      name: "CO オープン 40BB",
-      description: "6-max CO のオープンレンジ（ざっくり）",
-      heroPosition: "CO",
-      stackSizeBB: 40,
-      openHands: CO_OPEN,
-    }),
-    buildOpenRaiseScenario({
-      id: "btn_open_40bb",
-      name: "BTN オープン 40BB",
-      description: "6-max BTN のオープンレンジ（ざっくり）",
-      heroPosition: "BTN",
-      stackSizeBB: 40,
-      openHands: BTN_OPEN,
-    }),
-  ];
-
-  const meta: RangeSet["meta"] = {
-    id: "default_6max_open",
-    name: "6-max オープンレンジ（デフォルト）",
-    version: 1,
-    gameType: "6max",
-    createdAt: timestamp,
-    updatedAt: timestamp,
-    description:
-      "UTG / CO / BTN の 40BB オープンレンジを含むデフォルトレンジセット",
-  };
-
-  return {
-    meta,
-    scenarios,
+// Vite の BASE_URL を取るための簡易型
+interface ImportMetaEnvLike {
+  env?: {
+    BASE_URL?: string;
   };
 }
 
-/**
- * RangeSet 配列を localStorage に保存する
- */
-export function saveRangeSets(rangeSets: RangeSet[]): void {
-  if (typeof window === "undefined" || !window.localStorage) {
-    return;
-  }
+const BASE_URL =
+  ((import.meta as unknown as ImportMetaEnvLike).env?.BASE_URL) ?? "/";
 
-  try {
-    const serialized = JSON.stringify(rangeSets);
-    window.localStorage.setItem(STORAGE_KEY, serialized);
-  } catch {
-    // 容量オーバーなどは握りつぶす（アプリ側でリカバリ）
-  }
-}
+// JSON ファイルのURL（/poker-gto/data/ranges_6max.json みたいな形も吸収）
+const RANGE_DATA_URL = `${BASE_URL}data/ranges_6max.json`;
 
 /**
- * localStorage から RangeSet の配列を読み込む
- * - なければデフォルトセットを1つ作成して返す
- * - 壊れていてもデフォルトセットにフォールバック
+ * pftrainer_ranges_v2 から RangeSet[] をロード
+ * - データが無い or 壊れている場合は「空配列」を返すだけ（デフォルト生成は別関数でやる）
  */
 export function loadRangeSets(): RangeSet[] {
-  // SSR / テスト環境など localStorage が無い場合は、とりあえずデフォルト1つ返す
-  if (typeof window === "undefined" || !window.localStorage) {
-    return [createDefaultRangeSet()];
-  }
-
-  const raw = window.localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
-    const defaults = [createDefaultRangeSet()];
-    saveRangeSets(defaults);
-    return defaults;
+  if (typeof window === "undefined") {
+    return [];
   }
 
   try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) {
-      const defaults = [createDefaultRangeSet()];
-      saveRangeSets(defaults);
-      return defaults;
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return [];
     }
-    return parsed as RangeSet[];
-  } catch {
-    const defaults = [createDefaultRangeSet()];
-    saveRangeSets(defaults);
-    return defaults;
+
+    const parsed = JSON.parse(raw);
+
+    // v2 以降は RangeSet[] をそのまま保存している想定
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed as RangeSet[];
+    }
+
+    // 互換用: { rangeSets: [...] } 形式だった場合
+    if (
+      parsed &&
+      Array.isArray((parsed as any).rangeSets) &&
+      (parsed as any).rangeSets.length > 0
+    ) {
+      return (parsed as any).rangeSets as RangeSet[];
+    }
+
+    return [];
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error("Failed to load range sets", e);
+    return [];
   }
 }
 
 /**
- * 保存済みレンジセットがあればそれを返し、なければデフォルトを作って保存して返す
- * - 互換性のために残してあるが、実質 loadRangeSets() と同じ挙動
+ * RangeSet[] を pftrainer_ranges_v2 に保存
  */
-export function loadOrCreateDefaultRangeSets(): RangeSet[] {
-  return loadRangeSets();
+export function saveRangeSets(rangeSets: RangeSet[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(rangeSets));
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error("Failed to save range sets", e);
+  }
 }
 
 /**
- * RangeSet ID から RangeSet を探す
- * - 見つからなければ「最初の RangeSet」か null を返す
+ * ID から RangeSet を探す
  */
 export function findRangeSetById(
   rangeSets: RangeSet[],
-  id: string | null | undefined,
+  rangeSetId: string | null | undefined,
 ): RangeSet | null {
-  if (rangeSets.length === 0) return null;
-  if (!id) return rangeSets[0];
-
-  const found = rangeSets.find((rs) => rs.meta.id === id);
-  return found ?? rangeSets[0] ?? null;
+  if (!rangeSetId) return null;
+  return rangeSets.find((rs) => rs.meta?.id === rangeSetId) ?? null;
 }
 
 /**
- * Scenario ID から RangeScenario を探す
- * - 見つからなければ「最初のシナリオ」か null を返す
+ * RangeSet or RangeSet[] 内からシナリオを探す
  */
 export function findScenarioById(
-  rangeSet: RangeSet | null,
-  id: string | null | undefined,
+  rangeSetOrSets: RangeSet | RangeSet[] | null | undefined,
+  scenarioId: string | null | undefined,
 ): RangeScenario | null {
-  if (!rangeSet || rangeSet.scenarios.length === 0) return null;
-  if (!id) return rangeSet.scenarios[0];
+  if (!scenarioId) return null;
+  if (!rangeSetOrSets) return null;
 
-  const found = rangeSet.scenarios.find((sc) => sc.id === id);
-  return found ?? rangeSet.scenarios[0] ?? null;
+  const rangeSets = Array.isArray(rangeSetOrSets)
+    ? rangeSetOrSets
+    : [rangeSetOrSets];
+
+  for (const rs of rangeSets) {
+    const found = rs.scenarios.find((s) => s.id === scenarioId);
+    if (found) return found;
+  }
+  return null;
+}
+
+// ------------------------------------------------------
+// ranges_6max.json → GTO入り RangeSet 生成
+// ------------------------------------------------------
+
+// JSON構造用のローカル型（他と衝突しないよう Gto〜 プレフィックスを付ける）
+interface GtoJsonPositionData {
+  ev?: number;
+  open?: {
+    raise?: number;
+    call?: number;
+    fold?: number;
+  };
+  vs3bet?: {
+    call?: number;
+    fourBet?: number;
+    fold?: number;
+  };
+}
+
+interface GtoJsonHandEntry {
+  hand: string; // "AA", "AKs", "AKo" など
+  positions?: Record<string, GtoJsonPositionData>;
+}
+
+interface GtoJsonRangeRoot {
+  hands?: GtoJsonHandEntry[];
+}
+
+/**
+ * ranges_6max.json から「GTO 6max Default」RangeSet を構築する。
+ *
+ * - 各ポジションごとに 1 シナリオ:
+ *   - "UTG Open"
+ *   - "HJ Open"
+ *   - "CO Open"
+ *   - "BTN Open"
+ *   - "SB Open"
+ *   - "BB Open"
+ */
+export async function createInitialRangeSetFromJson(): Promise<RangeSet> {
+  const res = await fetch(RANGE_DATA_URL);
+  if (!res.ok) {
+    throw new Error(
+      `Failed to load range data JSON: ${res.status} ${res.statusText}`,
+    );
+  }
+
+  const json = (await res.json()) as GtoJsonRangeRoot;
+  const hands = Array.isArray(json.hands) ? json.hands : [];
+
+  // 6max 用ポジション
+  const positions: Position[] = ["UTG", "HJ", "CO", "BTN", "SB", "BB"];
+
+  const scenarios: RangeScenario[] = [];
+
+for (const pos of positions) {
+  // ========= OPEN シナリオ =========
+  {
+    const scenarioHands: Record<HandCode, HandDecision> = {};
+    const enabledHandCodes: HandCode[] = [];
+    const handEvs: Record<HandCode, number> = {};
+
+    for (const entry of hands) {
+      const code = entry.hand.trim() as HandCode;
+      if (!code) continue;
+
+      const pData = entry.positions?.[pos];
+      if (!pData) {
+        // そのポジションにデータが無ければスキップ
+        continue;
+      }
+
+      // EV（あれば）
+      if (typeof pData.ev === "number") {
+        handEvs[code] = pData.ev;
+      }
+
+      const open = pData.open;
+      if (!open) {
+        continue;
+      }
+
+      const raise = open.raise ?? 0;
+      const call = open.call ?? 0;
+      const baseFold = open.fold ?? 0;
+
+      let fold = baseFold;
+      if (fold === 0 && (raise > 0 || call > 0)) {
+        // fold 未指定なら残りで埋める（マイナスにはしない）
+        fold = Math.max(0, 100 - raise - call);
+      }
+
+      const decision: HandDecision = { raise, call, fold };
+
+      scenarioHands[code] = decision;
+
+      // raise or call が効いてるハンドだけ「出題候補」にする
+      if (raise > 0 || call > 0) {
+        enabledHandCodes.push(code);
+      }
+    }
+
+    if (enabledHandCodes.length > 0) {
+      const scenarioId = `open_${pos.toLowerCase()}`;
+
+      const scenario: RangeScenario = {
+        id: scenarioId,
+        name: `${pos} Open`,
+        position: pos,
+        heroPosition: pos,
+        scenarioType: "OPEN",
+        stackSizeBB: 100,
+        hands: scenarioHands,
+        enabledHandCodes,
+        handEvs,
+      };
+
+      scenarios.push(scenario);
+    }
+  }
+
+  // ========= VS 3BET シナリオ =========
+  {
+    const scenarioHands: Record<HandCode, HandDecision> = {};
+    const enabledHandCodes: HandCode[] = [];
+    const handEvs: Record<HandCode, number> = {};
+
+    for (const entry of hands) {
+      const code = entry.hand.trim() as HandCode;
+      if (!code) continue;
+
+      const pData = entry.positions?.[pos];
+      if (!pData) continue;
+
+      const vs = pData.vs3bet;
+      if (!vs) continue; // vs3bet が無いポジションはスキップ
+
+      // EV（あれば）: とりあえずポジション全体の ev を共有
+      if (typeof pData.ev === "number") {
+        handEvs[code] = pData.ev;
+      }
+
+      const raise = vs.fourBet ?? 0; // fourBet を「RAISE」として扱う
+      const call = vs.call ?? 0;
+      const baseFold = vs.fold ?? 0;
+
+      let fold = baseFold;
+      if (fold === 0 && (raise > 0 || call > 0)) {
+        fold = Math.max(0, 100 - raise - call);
+      }
+
+      const decision: HandDecision = { raise, call, fold };
+      scenarioHands[code] = decision;
+
+      if (raise > 0 || call > 0) {
+        enabledHandCodes.push(code);
+      }
+    }
+
+    if (enabledHandCodes.length > 0) {
+      const scenarioId = `vs3bet_${pos.toLowerCase()}`;
+
+      const scenario: RangeScenario = {
+        id: scenarioId,
+        name: `${pos} vs 3bet`,
+        position: pos,
+        heroPosition: pos,
+        // scenarioType をちゃんと分けたい場合は types.ts 側に "VS_3BET" を足す。
+        // いまは型崩れを避けて一旦 "OPEN" のままにしておく。
+        scenarioType: "OPEN",
+        stackSizeBB: 100,
+        hands: scenarioHands,
+        enabledHandCodes,
+        handEvs,
+      };
+
+      scenarios.push(scenario);
+    }
+  }
+}
+
+  const nowIso = new Date().toISOString();
+
+  const rangeSet: RangeSet = {
+    meta: {
+      id: "gto_6max_default",
+      name: "GTO 6max Default",
+      description: "ranges_6max.json から生成された 6max オープンレンジ",
+      // gameType や tags が必須ならここに追加
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      version: 1,
+    } as RangeSet["meta"],
+    scenarios,
+  };
+
+  return rangeSet;
+}
+
+/**
+ * localStorage に何もなければ JSON から初期 RangeSet を作る。
+ * 既にシナリオ付きの RangeSet が保存されていればそれを優先。
+ */
+export async function initRangeSetsFromJsonIfEmpty(): Promise<RangeSet[]> {
+  const existing = loadRangeSets();
+
+  const hasScenario = existing.some(
+    (rs) => Array.isArray(rs.scenarios) && rs.scenarios.length > 0,
+  );
+
+  if (hasScenario) {
+    return existing;
+  }
+
+  const initial = await createInitialRangeSetFromJson();
+  const all: RangeSet[] = [initial];
+  saveRangeSets(all);
+  return all;
+}
+
+/**
+ * TrainerRoot などから呼ばれる想定。
+ */
+export async function loadOrInitRangeSets(): Promise<RangeSet[]> {
+  return initRangeSetsFromJsonIfEmpty();
+}
+
+/**
+ * 「デフォルトに戻す」ボタン用。
+ * localStorage を消してから JSON から作り直す。
+ */
+export async function resetRangeSetsToDefault(): Promise<RangeSet[]> {
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.removeItem(STORAGE_KEY);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error("Failed to clear range sets storage", e);
+    }
+  }
+
+  const sets = await initRangeSetsFromJsonIfEmpty();
+  return sets;
 }

@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from "react";
 import { Trainer } from "../../core/trainer";
 import { loadSettings, saveSettings } from "../../core/settings";
-import { loadRangeSets } from "../../core/ranges";
+import { loadRangeSets, initRangeSetsFromJsonIfEmpty } from "../../core/ranges";
 import type {
   TrainingSession,
   TrainingQuestion,
@@ -15,7 +15,17 @@ import { TrainerConfigPanel } from "./TrainerConfigPanel";
 import { TrainerQuizView } from "./TrainerQuizView";
 import { TrainerResultView } from "./TrainerResultView";
 import { setRangeFocus } from "../../ranges/rangeFocus";
-import type { Position, Hand } from "../../ranges/types";
+import type {
+  Position,
+  Hand,
+  HandCategoryIndex,
+  RangeCategoryKey
+} from "../../ranges/types";
+import {
+  loadRangeDataWithCategories,
+  buildHandCategoryIndex,
+  getHandCategoryFor
+} from "../../ranges/rangeData";
 
 export type TrainerPhase = "CONFIG" | "QUIZ" | "FEEDBACK" | "RESULT";
 
@@ -96,58 +106,99 @@ export function TrainerRoot() {
   const [feedback, setFeedback] = useState<QuestionResult | null>(null);
   const [reviewHandsCount, setReviewHandsCount] =
     useState<number | null>(null);
+  const [handCategoryIndex, setHandCategoryIndex] =
+    useState<HandCategoryIndex | null>(null);
 
   // 初期ロード＆Trainerインスタンス生成
   useEffect(() => {
     console.log("[TrainerRoot] mount");
-    const settings = loadSettings();
-    const rs = loadRangeSets();
-    setRangeSets(rs);
-    let activeRs =
-      rs.find((x) => x.meta.id === settings.activeRangeSetId) ??
-      (rs[0] ?? null);
-    let activeSc =
-      activeRs?.scenarios.find(
-        (x) => x.id === settings.activeScenarioId,
-      ) ??
-      (activeRs?.scenarios[0] ?? null) ??
-      null;
+    let cancelled = false;
 
-    if (activeRs && settings.activeRangeSetId !== activeRs.meta.id) {
-      settings.activeRangeSetId = activeRs.meta.id;
-      saveSettings(settings);
-    }
-    if (activeSc && settings.activeScenarioId !== activeSc.id) {
-      settings.activeScenarioId = activeSc.id;
-      saveSettings(settings);
-    }
+    (async () => {
+      const settings = loadSettings();
 
-    setActiveRangeSet(activeRs);
-    setActiveScenario(activeSc ?? null);
-    trainerRef.current = new Trainer(settings, rs);
+      // ★ ここで「ローカルに何もなければ JSON から初期レンジを生成」
+      const rs = await initRangeSetsFromJsonIfEmpty();
+      if (cancelled) return;
 
-    // 苦手ハンド復習モードがセットされているか簡易チェック
-    try {
-      const reviewHandsStr = window.localStorage.getItem(
-        REVIEW_HANDS_KEY,
-      );
-      if (reviewHandsStr) {
-        const hands = JSON.parse(reviewHandsStr) as HandCode[];
-        if (Array.isArray(hands) && hands.length > 0) {
-          setReviewHandsCount(hands.length);
-          console.log(
-            "[TrainerRoot] review mode detected:",
-            hands.length,
-          );
-        }
+      setRangeSets(rs);
+
+      // activeRangeSet を決定（設定済みがあればそれ、なければ先頭）
+      let activeRs =
+        rs.find((x) => x.meta.id === settings.activeRangeSetId) ??
+        (rs[0] ?? null);
+
+      // activeScenario を決定（設定済みがあればそれ、なければ先頭）
+      let activeSc =
+        activeRs?.scenarios.find(
+          (x) => x.id === settings.activeScenarioId,
+        ) ??
+        (activeRs?.scenarios[0] ?? null) ??
+        null;
+
+      // settings を同期
+      if (activeRs && settings.activeRangeSetId !== activeRs.meta.id) {
+        settings.activeRangeSetId = activeRs.meta.id;
+        saveSettings(settings);
       }
-    } catch (e) {
-      console.error(
-        "[TrainerRoot] failed to read review hands",
-        e,
-      );
-      setReviewHandsCount(null);
-    }
+      if (activeSc && settings.activeScenarioId !== activeSc.id) {
+        settings.activeScenarioId = activeSc.id;
+        saveSettings(settings);
+      }
+
+      setActiveRangeSet(activeRs);
+      setActiveScenario(activeSc ?? null);
+
+      // Trainer インスタンス生成
+      trainerRef.current = new Trainer(settings, rs);
+
+      // 苦手ハンド復習モードがセットされているか簡易チェック
+      try {
+        const reviewHandsStr = window.localStorage.getItem(
+          REVIEW_HANDS_KEY,
+        );
+        if (reviewHandsStr) {
+          const hands = JSON.parse(reviewHandsStr) as HandCode[];
+          if (Array.isArray(hands) && hands.length > 0) {
+            setReviewHandsCount(hands.length);
+            console.log(
+              "[TrainerRoot] review mode detected:",
+              hands.length,
+            );
+          }
+        }
+      } catch (e) {
+        console.error(
+          "[TrainerRoot] failed to read review hands",
+          e,
+        );
+        setReviewHandsCount(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+    // 169ハンド × ポジション → カテゴリ のインデックスを初期ロード
+  useEffect(() => {
+    let cancelled = false;
+
+    loadRangeDataWithCategories()
+      .then(({ positionBuckets }) => {
+        if (cancelled) return;
+        const index = buildHandCategoryIndex(positionBuckets);
+        setHandCategoryIndex(index);
+      })
+      .catch((e) => {
+        console.error("[TrainerRoot] failed to load hand category index", e);
+        setHandCategoryIndex(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // レンジセット変更
@@ -320,6 +371,7 @@ export function TrainerRoot() {
 
     setRangeFocus({
       position: heroPosition,
+      action: "open",
       hand: heroHand,
     });
 
@@ -331,6 +383,62 @@ export function TrainerRoot() {
       );
     }
   };
+    // 現在の問題用のカテゴリ＆EVラベルを組み立て
+  let spotLabel: string | null = null;
+
+  if (currentQuestion && activeScenario) {
+    const heroHand = convertHandCodeToGridHand(currentQuestion.hand);
+
+    if (heroHand) {
+      const heroPosRaw = activeScenario.heroPosition;
+      const validPositions: Position[] = ["UTG", "MP", "CO", "BTN", "SB", "BB"];
+      const heroPosition: Position = validPositions.includes(
+        heroPosRaw as Position
+      )
+        ? (heroPosRaw as Position)
+        : "BTN";
+
+      // カテゴリ（premium / strong / medium / speculative）
+      let categoryLabel: string | null = null;
+      if (handCategoryIndex) {
+        const cat = getHandCategoryFor(
+          handCategoryIndex,
+          heroPosition,
+          heroHand
+        );
+        if (cat) {
+          const catLabelMap: Record<RangeCategoryKey, string> = {
+            premium: "プレミアム",
+            strong: "ストロング",
+            medium: "ミディアム",
+            speculative: "スペキュラティブ"
+          };
+          categoryLabel = catLabelMap[cat] ?? cat;
+        }
+      }
+
+      // EV（RangeScenario.handEvs から取得）
+      let evLabel: string | null = null;
+      const evMap = (activeScenario.handEvs ??
+        null) as Record<string, number> | null;
+      const ev =
+        evMap && typeof evMap[heroHand] === "number"
+          ? evMap[heroHand]
+          : null;
+      if (ev != null) {
+        const sign = ev > 0 ? "+" : ev < 0 ? "" : "";
+        evLabel = `${sign}${ev.toFixed(2)} bb`;
+      }
+
+      const parts: string[] = [];
+      parts.push(heroHand); // "AKo" とか
+      parts.push(heroPosition); // "BTN" など
+      if (categoryLabel) parts.push(categoryLabel); // "プレミアム" など
+      if (evLabel) parts.push(`EV ${evLabel}`);
+
+      spotLabel = parts.join(" / ");
+    }
+  }
 
   // CONFIG 画面でレンジセットが無い場合
   if (!activeRangeSet) {
@@ -356,15 +464,16 @@ export function TrainerRoot() {
           }
         >
           {phase === "CONFIG" && (
-            <TrainerConfigPanel
-              rangeSets={rangeSets}
-              activeRangeSet={activeRangeSet}
-              activeScenario={activeScenario}
-              reviewHandsCount={reviewHandsCount}
-              onChangeRangeSet={handleChangeRangeSet}
-              onChangeScenario={handleChangeScenario}
-              onStartQuiz={handleStartQuiz}
-            />
+          <TrainerConfigPanel
+            rangeSets={rangeSets}
+            activeRangeSet={activeRangeSet}
+            activeScenario={activeScenario}
+            reviewHandsCount={reviewHandsCount}
+            onChangeRangeSets={setRangeSets}              // ★ 追加
+            onChangeRangeSet={handleChangeRangeSet}
+            onChangeScenario={handleChangeScenario}
+            onStartQuiz={handleStartQuiz}
+          />
           )}
         </div>
 
@@ -383,7 +492,7 @@ export function TrainerRoot() {
                 key={currentQuestion.hand}
                 question={currentQuestion}
                 scenarioName={activeScenario?.name ?? null}
-                spotLabel={null}
+                spotLabel={spotLabel}
                 phase={phase}
                 feedback={feedback}
                 onSwipeAnswer={handleAnswer}

@@ -54,7 +54,7 @@ export const EditorRoot: React.FC = () => {
     const ctx = consumeRangeFocus();
     if (ctx) {
       setInitialPosition(ctx.position);
-      setInitialHand(ctx.hand);
+      setInitialHand(ctx.hand ?? null);
     }
   }, []);
 

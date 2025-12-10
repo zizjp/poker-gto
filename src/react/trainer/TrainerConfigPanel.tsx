@@ -1,6 +1,6 @@
-// src/react/trainer/TrainerConfigPanel.tsx
 import React from "react";
-import type { RangeSet, RangeScenario } from "../../core/types";
+import type { AppSettings, RangeSet, RangeScenario } from "../../core/types";
+import { resetRangeSetsToDefault } from "../../core/ranges";
 import { Tag } from "./components/Tag";
 
 interface TrainerConfigPanelProps {
@@ -8,6 +8,9 @@ interface TrainerConfigPanelProps {
   activeRangeSet: RangeSet | null;
   activeScenario: RangeScenario | null;
   reviewHandsCount: number | null;
+
+  // 追加: レンジセット一覧を親コンポーネント側の state に反映するため
+  onChangeRangeSets: (next: RangeSet[]) => void;
 
   onChangeRangeSet: (rangeSetId: string) => void;
   onChangeScenario: (scenarioId: string) => void;
@@ -19,6 +22,7 @@ export function TrainerConfigPanel({
   activeRangeSet,
   activeScenario,
   reviewHandsCount,
+  onChangeRangeSets,
   onChangeRangeSet,
   onChangeScenario,
   onStartQuiz,
@@ -38,13 +42,46 @@ export function TrainerConfigPanel({
   const scenarioDesc: string =
     activeScenario?.name ?? "シナリオを選択してください";
 
+  // 🔁 デフォルト(GTOプリセット)に戻す
+  const handleResetToDefaultClick = async () => {
+    if (
+      !window.confirm(
+        "レンジをデフォルト(GTOプリセット)に戻します。\nカスタマイズした内容はすべて削除されます。よろしいですか？"
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const nextSets = await resetRangeSetsToDefault();
+
+      // 親の state に RangeSet 一覧を反映
+      onChangeRangeSets(nextSets);
+
+      const first = nextSets[0] ?? null;
+      const firstScenario = first?.scenarios[0] ?? null;
+
+      // アクティブなレンジセット・シナリオもリセット
+      if (first) {
+        onChangeRangeSet(first.meta.id);
+      }
+      if (firstScenario) {
+        onChangeScenario(firstScenario.id);
+      }
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error("Failed to reset range sets to default", e);
+      alert("デフォルトレンジの復元に失敗しました。時間をおいて再度お試しください。");
+    }
+  };
+
   return (
     <div className="trainer-config">
       {/* Range Set */}
       <div className="config-card">
         <div className="config-card__label">
-            <span className="config-icon">📚</span>
-            レンジセット
+          <span className="config-icon">📚</span>
+          レンジセット
         </div>
         <select
           className="config-select"
@@ -69,13 +106,24 @@ export function TrainerConfigPanel({
 
         {/* 説明 */}
         <div className="config-desc">{rangeDesc}</div>
+
+        {/* デフォルトに戻すボタン */}
+        <div className="config-reset-row">
+          <button
+            type="button"
+            className="button trainer-reset-button"
+            onClick={handleResetToDefaultClick}
+          >
+            デフォルトに戻す（GTO）
+          </button>
+        </div>
       </div>
 
       {/* Scenario */}
       <div className="config-card">
         <div className="config-card__label">
-            <span className="config-icon">🎯</span>
-            シナリオ
+          <span className="config-icon">🎯</span>
+          シナリオ
         </div>
         <select
           className="config-select"
@@ -109,10 +157,10 @@ export function TrainerConfigPanel({
       {/* 復習モード */}
       {reviewHandsCount && reviewHandsCount > 0 && (
         <div className="config-card review-card">
-        <div className="review-title">
+          <div className="review-title">
             <span className="config-icon">🔄</span>
             復習モード
-        </div>
+          </div>
           <div className="review-body">
             苦手ハンド数: <strong>{reviewHandsCount}</strong>
             <br />
@@ -124,8 +172,8 @@ export function TrainerConfigPanel({
       {/* Hero / Start Section */}
       <div className="config-hero">
         <div className="config-hero-title">
-        <span className="config-icon-large">🚀</span>
-        Ready to Train?
+          <span className="config-icon-large">🚀</span>
+          Ready to Train?
         </div>
 
         <div className="config-hero-summary">
@@ -143,7 +191,11 @@ export function TrainerConfigPanel({
           </div>
         </div>
 
-        <button className="config-start-btn" onClick={onStartQuiz}>
+        <button
+          type="button"
+          className="button trainer-start-button"
+          onClick={onStartQuiz}
+        >
           クイズ開始
         </button>
       </div>
